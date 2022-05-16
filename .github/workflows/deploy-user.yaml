@@ -1,0 +1,69 @@
+name: cd-user
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'user/**'
+
+jobs:
+  ci:
+    name: Deploy User
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: dv-user
+      USER_DB: ${{secrets.USER_DB}}
+
+    steps:
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.18
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v0.6.0
+        with:
+          service_account_key: ${{secrets.GCP_SA_KEY}}
+          project_id: ${{secrets.GCP_PROJECT_ID}}
+          export_default_credentials: true # for authenticate cloud run
+
+      - name: Init GCP Cluster
+        uses: google-github-actions/get-gke-credentials@v0.7.0
+        with:
+          cluster_name: ${{ secrets.GCP_CLUSTER }}
+          location: ${{ secrets.GCP_ZONE }}
+          credentials: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Install kubectl
+        run: gcloud components install kubectl
+
+      - name: Configure docker
+        run: |
+          gcloud --quiet auth configure-docker
+      
+      - name: Fetch and re-populate env
+        shell: bash
+        run: |
+          gcloud secrets versions access latest --secret=${{secrets.SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > user/app/temp.env && sed s/$USER_DB/DB_SOURCE/g user/app/temp.env > user/app/app.env
+          rm -rf user/app/temp.env
+          printf "\nSERVICE_NAME=$SERVICE_NAME" >> user/app/app.env
+
+      - name: Build
+        run: |
+          cd user && docker build -t "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA" -t "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:latest" --build-arg GITHUB_SHA="$GITHUB_SHA" --build-arg GITHUB_REF="$GITHUB_REF" -f Dockerfile.prod .
+
+      - name: Publish
+        run: |
+          docker push "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"
+          docker push "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:latest"
+
+      - name: Apply k8s deployments and services
+        run: |
+          kubectl apply -f infras/k8s/user-depl.yaml
+          kubectl apply -f infras/k8s/ingress-svc.yaml
+          kubectl set image deployments/dv-user-depl dv-user="gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"

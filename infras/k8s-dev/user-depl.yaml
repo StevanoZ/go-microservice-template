@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dv-user-depl
+spec:
+  replicas: 1
+  selector: 
+    matchLabels:
+      app: dv-user
+  template:
+    metadata:
+      labels:
+        app: dv-user
+    spec:
+      containers:
+        - name: dv-user
+          image: stevanoz/dv-user-go
+          
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dv-user-svc
+spec:
+  selector:
+    app: dv-user
+  ports:
+    - name: dv-user
+      protocol: TCP
+      port: 8080
+      targetPort: 8080

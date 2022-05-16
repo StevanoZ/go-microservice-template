@@ -1,0 +1,67 @@
+name: ci-user
+
+on:
+  pull_request:
+    branches: 
+      - master
+    paths:
+      - 'user/**'
+  push:
+    branches:
+      - master
+    paths:
+      - 'user/**'
+
+jobs:
+  ci:
+    name: Test User
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: ${{secrets.POSTGRES_USER}}
+          POSTGRES_DB: dv_user_test
+          POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD}}     
+        ports:
+          - 5454:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.18
+        id: go
+      
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      
+      - name: Install required dependency
+        run: cd user && go mod tidy
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.15.1/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/bin/migrate
+          which migrate
+      
+      - name: Run migrations
+        run: cd user && make migrateUpTest
+
+      - name: Run test
+        run: cd user && make test

@@ -1,0 +1,37 @@
+apiVersion: skaffold/v2beta26
+kind: Config
+deploy:
+  kubectl:
+    manifests:
+      - infras/k8s-dev/*
+      
+build:
+  local:
+    push: false
+  artifacts:
+    - image: stevanoz/dv-user-go
+      context: user
+      docker:
+        dockerfile: Dockerfile.dev
+      sync:
+        manual:
+          - src: "**/*.go"
+            dest: .
+    - image: stevanoz/dv-notification-go
+      context: notification
+      docker:
+        dockerfile: Dockerfile.dev
+      sync:
+        manual:
+          - src: "**/*.go"
+            dest: .
+    # - image: stevanoz/dv-notification-go
+    #   context: notification
+    #   docker:
+    #     dockerfile: Dockerfile.dev
+    #   sync:
+    #     manual:
+    #       - src: "**/*.go"
+    #         dest: .
+
+

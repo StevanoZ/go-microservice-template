@@ -1,0 +1,2 @@
+DELETE TABLE IF EXISTS "user_image";
+DELETE TABLE IF EXISTS "user";
