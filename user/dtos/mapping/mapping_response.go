@@ -79,16 +79,19 @@ func ToPaginationResp(page int, limit int, total int) response.PaginationResp {
 	var prevPage response.Prev
 	isLoadMore := false
 
-	if (page * limit) < total {
-		nextPage.Page = page + 1
+	// FROM CLIENT
+	defaultPage := (page / limit) + 1
+
+	if ((defaultPage) * limit) < total {
+		nextPage.Page = defaultPage + 1
 		isLoadMore = true
 	} else {
 		nextPage.Page = -1
 		isLoadMore = false
 	}
 
-	if page > 1 {
-		prevPage.Page = page - 1
+	if defaultPage > 1 {
+		prevPage.Page = defaultPage - 1
 	} else {
 		prevPage.Page = -1
 	}

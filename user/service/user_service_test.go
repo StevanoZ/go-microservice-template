@@ -318,25 +318,31 @@ func TestLogIn(t *testing.T) {
 
 	userSvc,
 		userRepo,
-		_, _, _ := initUserSvc(ctrl, config)
+		fileSvc, _, _ := initUserSvc(ctrl, config)
 
+	imagePath := fmt.Sprintf("user/%s", USER_ID)
+	preSignedUrl := fmt.Sprintf("https://amazon.s3/%s/test-image.png", imagePath)
+	hashedPassword, err := shrd_utils.HashedPassword(PASSWORD)
+	assert.NoError(t, err)
+	userDbActive := user_db.User{
+		ID:            USER_ID,
+		Password:      hashedPassword,
+		Status:        "active",
+		Email:         EMAIL,
+		Username:      USERNAME,
+		MainImagePath: imagePath,
+	}
 	t.Run("Success Request", func(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
-		userId := USER_ID
-		hashedPassword, err := shrd_utils.HashedPassword(PASSWORD)
-		assert.NoError(t, err)
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
-			ID:       userId,
-			Password: hashedPassword,
-			Status:   "active",
-			Email:    EMAIL,
-			Username: USERNAME,
-		}, nil).Times(1)
+
+		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
+		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return(preSignedUrl, nil).Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
-			assert.Equal(t, userId, resp.ID)
+			assert.Equal(t, USER_ID, resp.ID)
 			assert.NotNil(t, resp.Token)
+			assert.Equal(t, preSignedUrl, resp.MainImageUrl)
 		})
 
 	})
@@ -378,6 +384,34 @@ func TestLogIn(t *testing.T) {
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|invalid credentials",
 			StatusCode: 401,
+		}, func() {
+			userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
+		})
+	})
+	t.Run("Not call get pre sign URL when user main image path is empty", func(t *testing.T) {
+		setupAndMockTx(t, DB, userRepo)
+		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+			ID:            USER_ID,
+			Status:        "active",
+			Password:      hashedPassword,
+			MainImagePath: "",
+		}, nil).Times(1)
+		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(0)
+
+		assert.NotPanics(t, func() {
+			resp := userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
+			assert.Equal(t, USER_ID, resp.ID)
+			assert.NotNil(t, resp.Token)
+		})
+	})
+	t.Run("Failed when getting pre sign URL", func(t *testing.T) {
+		setupAndMockTx(t, DB, userRepo)
+		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
+		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		assert.PanicsWithValue(t, shrd_utils.AppError{
+			StatusCode: 422,
+			Message:    fmt.Sprintf("%s|failed when trying to log in", UNPROCESSABLE_ENTITY),
 		}, func() {
 			userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
 		})

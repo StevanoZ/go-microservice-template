@@ -9,8 +9,8 @@ import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/StevanoZ/dv-user/dtos/request"
 	"github.com/StevanoZ/dv-user/service"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/go-openapi/runtime/middleware"
 )
 
 type UserHandler interface {
@@ -46,7 +46,14 @@ func NewUserHandler(
 func (h *UserHandlerImpl) SetupUserRoutes(
 	route *chi.Mux,
 ) {
+	shrd_utils.EnableCORS(route)
+
 	route.Mount("/api/user", route)
+
+	opts := middleware.SwaggerUIOpts{SpecURL: "/api/user/swagger.json", Path: "/doc"}
+	sh := middleware.SwaggerUI(opts, nil)
+	route.Handle("/doc/*", sh)
+	route.Handle("/swagger.json", http.FileServer(http.Dir("./docs")))
 
 	route.Post("/sign-up", h.SignUp)
 	route.Post("/log-in", h.LogIn)
@@ -60,6 +67,9 @@ func (h *UserHandlerImpl) SetupUserRoutes(
 	route.Put("/{userId}/image/{imageId}", h.authMiddleware.CheckIsAuthenticated(h.SetMainImage))
 	route.Delete("/{userId}/image/{imageId}", h.authMiddleware.CheckIsAuthenticated(h.DeleteImage))
 
+	route.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		shrd_utils.GenerateErrorResp(w, nil, 404)
+	})
 }
 
 func (h *UserHandlerImpl) SignUp(w http.ResponseWriter, r *http.Request) {

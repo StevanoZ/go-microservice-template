@@ -120,6 +120,12 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) response.UserWithTokenResp {
 	userWithTokenResp := response.UserWithTokenResp{}
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+		ewg := errgroup.Group{}
+		token := ""
+		preSignedUrl := ""
+		var err1 error
+		var err2 error
+
 		uTx := s.userRepo.WithTx(tx)
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
 
@@ -137,17 +143,31 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 			return shrd_utils.CustomError("invalid credentials", 401)
 		}
 
-		userWithTokenResp = mapping.ToUserWithTokenResp(user)
-		token, _, err := s.tokenMaker.CreateToken(shrd_token.PayloadParams{
-			UserId: user.ID,
-			Email:  user.Email,
-			Status: user.Status,
-		}, s.config.AccessTokenDuration)
+		ewg.Go(func() error {
+			token, _, err1 = s.tokenMaker.CreateToken(shrd_token.PayloadParams{
+				UserId: user.ID,
+				Email:  user.Email,
+				Status: user.Status,
+			}, s.config.AccessTokenDuration)
 
-		if err != nil {
-			return shrd_utils.CustomErrorWithTrace(err, "failed when creating token", 422)
+			return err1
+		})
+
+		ewg.Go(func() error {
+			if user.MainImagePath != "" {
+				preSignedUrl, err2 = s.fileSvc.GetPreSignUrl(ctx, user.MainImagePath)
+				return err2
+			}
+			return nil
+		})
+
+		if err := ewg.Wait(); err != nil {
+			return shrd_utils.CustomErrorWithTrace(err, "failed when trying to log in", 422)
 		}
+
+		userWithTokenResp = mapping.ToUserWithTokenResp(user)
 		userWithTokenResp.Token = token
+		userWithTokenResp.MainImageUrl = preSignedUrl
 
 		return nil
 	})
@@ -487,7 +507,7 @@ func (s *UserSvcImpl) GetUserImages(ctx context.Context, userId uuid.UUID) []res
 
 	shrd_utils.PanicIfError(err)
 	shrd_utils.ConvertInterface(data, &userImagesResp)
-	
+
 	return userImagesResp
 }
 
@@ -681,7 +701,7 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 		}
 
 		usersPaginationResp.Users = usersResp
-		usersPaginationResp.Pagination = mapping.ToPaginationResp(input.Page+1, input.Limit, int(counts))
+		usersPaginationResp.Pagination = mapping.ToPaginationResp(input.Page, input.Limit, int(counts))
 
 		return usersPaginationResp
 	})

@@ -8,14 +8,23 @@ import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-openapi/runtime/middleware"
 )
 
 func main() {
 	r := chi.NewRouter()
 	config := shrd_utils.LoadBaseConfig("./app", "app")
+	shrd_utils.EnableCORS(r)
+
 	r.Mount("/api/notification", r)
+
+	opts := middleware.SwaggerUIOpts{SpecURL: "/api/notification/swagger.json", Path: "/doc"}
+	sh := middleware.SwaggerUI(opts, nil)
+	r.Handle("/doc/*", sh)
+	r.Handle("/swagger.json", http.FileServer(http.Dir("./docs")))
+
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("PONG!"))
+		shrd_utils.GenerateSuccessResp(w, "PONG!", 200)
 	})
 
 	notificationSvc, err := InitializedApp(config)

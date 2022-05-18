@@ -1,0 +1,45 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MS-Notification Restfull API",
+    "version": "1",
+    "description": "OpenAPI for MS-Notification Restfull API"
+  },
+  "servers": [
+    {
+      "description": "MS-Notification Restfull API Server",
+      "url": "{serverBaseUrl}/api/notification",
+      "variables": {
+        "serverBaseUrl": {
+          "description": "Server Base Url",
+          "default": "https://stevanoz.xyz",
+          "enum": ["https://stevanoz.xyz", "http://stevanoz.dev.xyz"]
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/ping": {
+      "get": {
+        "description": "Ping server",
+        "responses": {
+          "200": {
+            "description": "Server alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": { "type": "string", "default": "PONG!" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

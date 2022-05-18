@@ -1,0 +1,1011 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MS-User Restfull API",
+    "version": "1",
+    "description": "OpenAPI for MS-User Restfull API"
+  },
+  "servers": [
+    {
+      "description": "MS-User Restfull API Server",
+      "url": "{serverBaseUrl}/api/user",
+      "variables": {
+        "serverBaseUrl": {
+          "description": "Server Base Url",
+          "default": "https://stevanoz.xyz",
+          "enum": ["https://stevanoz.xyz", "http://stevanoz.dev.xyz"]
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/sign-up": {
+      "post": {
+        "description": "Sign up user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "nullable": false
+                  },
+                  "username": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 3,
+                    "maxLength": 10
+                  },
+                  "password": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 6,
+                    "maxLength": 15
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success created user with status not-active (still need verify email)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation field (request body) OR email already in user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/log-in": {
+      "post": {
+        "description": "Log in user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "nullable": false
+                  },
+                  "password": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 6,
+                    "maxLength": 15
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success log in (will get response with token)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithTokenResp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation field (request body) OR not active user try to log in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify-otp": {
+      "post": {
+        "description": "Otp code verification that has been sent to the email",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "nullable": false },
+                  "otpCode": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 6,
+                    "maxLength": 6
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success verify otp (will get response with token)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithTokenResp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation field (request body) OR user status = active OR user attempt left is 0 OR otp code has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/resend-otp": {
+      "post": {
+        "description": "Resend Otp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "nullable": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success resend otp",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "default": "null",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation field (request body) OR user status = active OR user attempt left is 0",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{userId}": {
+      "put": {
+        "description": "Update user info",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 3,
+                    "maxLength": 10
+                  },
+                  "phoneNumber": {
+                    "type": "string",
+                    "nullable": false,
+                    "minLength": 12,
+                    "maxLength": 14
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation field (request body)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorize to perform operation (different userId)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "description": "Get user details (with images)",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/UserId" }],
+        "responses": {
+          "200": {
+            "description": "Success get user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithImageResp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/list": {
+      "get": {
+        "description": "Get users",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "nullable": false
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "nullable": false
+            }
+          },
+          {
+            "name": "filterBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": false,
+              "default": "active"
+            }
+          },
+          {
+            "name": "searchField",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": false
+            }
+          },
+          {
+            "name": "searchValue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": false
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "nullable": false },
+            "examples": {
+              "usernameASC": {
+                "description": "Sort by username ASC",
+                "value": "username"
+              },
+              "usernameDESC": {
+                "description": "Sort by username DESC",
+                "value": "-username"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success get users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string" },
+                              "email": { "type": "string" },
+                              "username": { "type": "string" },
+                              "status": { "type": "string" },
+                              "phoneNumber": { "type": "string" },
+                              "mainImageUrl": { "type": "string" },
+                              "createdAt": { "type": "string" },
+                              "updatedAt": { "type": "string" }
+                            }
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "total": { "type": "integer" },
+                            "isLoadMore": { "type": "boolean" },
+                            "next": {
+                              "type": "object",
+                              "properties": {
+                                "page": { "type": "integer" }
+                              }
+                            },
+                            "prev": {
+                              "type": "object",
+                              "properties": {
+                                "page": { "type": "integer" }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid validation query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{userId}/upload": {
+      "post": {
+        "description": "Upload user images",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/UserId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success upload images AND will set user main image URL if this is first time uploading",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserImageResp"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body type (not form data) OR upload more than 10 images OR upload more than 5mb OR file not valid (can't be open)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorize to perform operation (different userId)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{userId}/image": {
+      "get": {
+        "description": "Get user images",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/UserId" }],
+        "responses": {
+          "200": {
+            "description": "Success get user images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserImageResp"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed when finding user images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{userId}/image/{imageId}": {
+      "put": {
+        "description": "Update user image (isMain = true) AND set user main image URL",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/UserId" },
+          { "$ref": "#/components/parameters/ImageId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success update user image AND set main image URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "$ref": "#/components/schemas/UserImageResp"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "can't set the same main image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorize to perform operation (different userId)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found OR image not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Delete user image",
+        "security": [{ "AuthToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/UserId" },
+          { "$ref": "#/components/parameters/ImageId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success delete user image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "statusCode": { "type": "integer" },
+                    "data": {
+                      "default": "null",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "can't delete the main image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Required authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorize to perform operation (different userId)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found OR image not found",
+            "content": {
+              "appication/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Operation failed OR request not processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AuthToken": {
+        "description": "JWT Token",
+        "type": "http",
+        "bearerFormat": "JWT",
+        "scheme": "bearer"
+      }
+    },
+    "parameters": {
+      "UserId": {
+        "name": "userId",
+        "required": true,
+        "in": "path",
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "ImageId": {
+        "name": "imageId",
+        "required": true,
+        "in": "path",
+        "schema": { "type": "string", "format": "uuid" }
+      }
+    },
+    "schemas": {
+      "UserResp": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "statusCode": { "type": "integer" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string" },
+              "username": { "type": "string" },
+              "status": { "type": "string" },
+              "phoneNumber": { "type": "string" },
+              "mainImageUrl": { "type": "string" },
+              "createdAt": { "type": "string" },
+              "updatedAt": { "type": "string" }
+            }
+          }
+        }
+      },
+      "UserImageResp": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "imageUrl": { "type": "string" },
+          "imagePath": { "type": "string" },
+          "userId": { "type": "string", "format": "uuid" },
+          "isMain": { "type": "boolean" },
+          "createdAt": { "type": "string" },
+          "updatedAt": { "type": "string" }
+        }
+      },
+      "UserWithTokenResp": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "statusCode": { "type": "integer" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string" },
+              "username": { "type": "string" },
+              "status": { "type": "string" },
+              "phoneNumber": { "type": "string" },
+              "mainImageUrl": { "type": "string" },
+              "createdAt": { "type": "string" },
+              "updatedAt": { "type": "string" },
+              "token": { "type": "string" }
+            }
+          }
+        }
+      },
+      "UserWithImageResp": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "statusCode": { "type": "integer" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string" },
+              "username": { "type": "string" },
+              "status": { "type": "string" },
+              "phoneNumber": { "type": "string" },
+              "mainImageUrl": { "type": "string" },
+              "mainImagepath": { "type": "string" },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UserImageResp"
+                }
+              },
+              "createdAt": { "type": "string" },
+              "updatedAt": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ErrorResp": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "default": false },
+          "statusCode": { "type": "integer" },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "message": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}
