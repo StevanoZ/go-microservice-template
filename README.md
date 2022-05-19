@@ -1,10 +1,10 @@
 # Golang Microservices (CI/CD)
-The technologies used are Golang, PostgreSql, Kafka, Redis, GCP. This app is now live on https://stevanoz.xyz/api (will be closed if the billing runs out).
+The technologies used are Golang, PostgreSql, Kafka, Redis, GCP. This app is now live on www.stevanoz.xyz (will be closed if the billing runs out).
 For architecture I used clean architecture (best practice for testability). And sharing dependencies within apps (use public Go lib).
 
 This application has 2 services:
-* User
-* Notification
+* User. For API spec you can visit this url https://stevanoz.xyz/api/user/doc/
+* Notification. For API spec you can visit this url https://stevanoz.xyz/api/notification/doc/
 
 
 ## How To Run This App
