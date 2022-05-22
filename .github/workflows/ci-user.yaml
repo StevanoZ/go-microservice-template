@@ -44,6 +44,7 @@ jobs:
       SERVICE_NAME: dv-user
       BUCKET: ${{secrets.BUCKET}}
       THRESHOLD: ${{secrets.THRESHOLD}}
+      TOKEN: ${{secrets.GIT_TOKEN}}
     outputs:
       totalCoverage: ${{steps.test-coverage.outputs.total}}
       isPassMinCoverage: ${{steps.test-coverage.outputs.isPassMinCoverage}}
@@ -85,6 +86,7 @@ jobs:
       - name: Update status pending
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
+          token: $TOKEN
           status: "pending"
           name: code cov
 
@@ -130,6 +132,7 @@ jobs:
     env:
       SERVICE_NAME: dv-user
       BUCKET: ${{secrets.BUCKET}}
+      TOKEN: ${{secrets.GIT_TOKEN}}
 
     steps:
       - name: Check out code into the Go module directory
@@ -139,6 +142,7 @@ jobs:
         if: needs.test.outputs.isPassMinCoverage == 'true'
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
+          token: $TOKEN
           status: "success"
           name: code cov
           description: ${{needs.test.outputs.totalCoverage}}%
@@ -147,6 +151,7 @@ jobs:
         if: needs.test.outputs.isPassMinCoverage == 'false'
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
+          token: $TOKEN
           status: "error"
           name: code cov
           description: ${{needs.test.outputs.totalCoverage}}%
