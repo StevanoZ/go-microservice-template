@@ -113,6 +113,7 @@ func createUsersActive() []user_db.User {
 	}
 	return users
 }
+
 func buildUploadUrl(path string) string {
 	return fmt.Sprintf("https://amazon.s3.com/%s", path)
 }
@@ -221,6 +222,7 @@ func createPaginationCountParams(searchValue string) user_db.GetUsersPaginationC
 		FilterBy:    "active",
 	}
 }
+
 func TestSignUp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -258,7 +260,6 @@ func TestSignUp(t *testing.T) {
 			resp := userSvc.SignUp(ctx, request.SignUpReq{Email: EMAIL, Username: USERNAME, Password: PASSWORD})
 			assert.Equal(t, userId, resp.ID)
 		})
-
 	})
 	t.Run("Sql error (status code 422)", func(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
@@ -301,9 +302,11 @@ func TestSignUp(t *testing.T) {
 			Message:    fmt.Sprintf("%s|failed when creating user", UNPROCESSABLE_ENTITY),
 			StatusCode: 422,
 		}, func() {
-			userSvc.SignUp(ctx, request.SignUpReq{Email: EMAIL,
+			userSvc.SignUp(ctx, request.SignUpReq{
+				Email:    EMAIL,
 				Username: USERNAME,
-				Password: PASSWORD})
+				Password: PASSWORD,
+			})
 		})
 	})
 }
@@ -344,7 +347,6 @@ func TestLogIn(t *testing.T) {
 			assert.NotNil(t, resp.Token)
 			assert.Equal(t, preSignedUrl, resp.MainImageUrl)
 		})
-
 	})
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
@@ -1376,7 +1378,7 @@ func TestGetUsers(t *testing.T) {
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)
-	defer cacheSvc.CloseClient()
+	defer shrd_utils.DeferCheck(cacheSvc.CloseClient)
 
 	t.Run("Failed when finding user (status code 400)", func(t *testing.T) {
 		reqParams := createPaginationReq()
@@ -1495,7 +1497,7 @@ func TestGetUserImages(t *testing.T) {
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)
-	defer cacheSvc.CloseClient()
+	defer shrd_utils.DeferCheck(cacheSvc.CloseClient)
 
 	t.Run("Failed when finding user images (status code 400)", func(t *testing.T) {
 		userId := USER_ID
@@ -1585,7 +1587,7 @@ func TestGetUser(t *testing.T) {
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)
-	defer cacheSvc.CloseClient()
+	defer shrd_utils.DeferCheck(cacheSvc.CloseClient)
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		userId := USER_ID

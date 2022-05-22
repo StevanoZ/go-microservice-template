@@ -1,43 +1,44 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/StevanoZ/dv-notification/handler"
 	shrd_middleware "github.com/StevanoZ/dv-shared/middleware"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/StevanoZ/dv-user/handler"
 	"github.com/go-chi/chi/v5"
 )
 
 type Server interface {
 	Start()
+	ListenEvent(ctx context.Context)
 }
 
 type ServerImpl struct {
-	route       *chi.Mux
-	config      *shrd_utils.BaseConfig
-	userHandler handler.UserHandler
+	route               *chi.Mux
+	config              *shrd_utils.BaseConfig
+	notificationHandler handler.NotificationHandler
 }
 
-func NewServer(
-	route *chi.Mux,
+func NewServer(route *chi.Mux,
 	config *shrd_utils.BaseConfig,
-	userHandler handler.UserHandler,
+	notificationHandler handler.NotificationHandler,
 ) Server {
 	return &ServerImpl{
-		route:       route,
-		config:      config,
-		userHandler: userHandler,
+		route:               route,
+		config:              config,
+		notificationHandler: notificationHandler,
 	}
 }
 
 func (s *ServerImpl) Start() {
 	s.route.Use(shrd_middleware.Recovery)
-	s.userHandler.SetupUserRoutes(s.route)
+	s.notificationHandler.SetupUserRoutes(s.route)
 
 	fmt.Println("server started")
 
@@ -50,4 +51,8 @@ func (s *ServerImpl) Start() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
+}
+
+func (s *ServerImpl) ListenEvent(ctx context.Context) {
+	s.notificationHandler.ListenEvent(ctx, true)
 }

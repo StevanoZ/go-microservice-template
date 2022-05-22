@@ -77,7 +77,7 @@ require (
 )
 
 require (
-	github.com/StevanoZ/dv-shared v1.2.9
+	github.com/StevanoZ/dv-shared v1.2.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.7
 	github.com/confluentinc/confluent-kafka-go v1.8.2
 	github.com/go-chi/chi/v5 v5.0.7

@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -37,16 +35,6 @@ var (
 	SYMMETRIC_KEY          = shrd_utils.LoadBaseConfig("../app", "test").TokenSymmetricKey
 	FILES, MULTI_PART_FORM = shrd_helper.CreateFormFile(3, "test-image.png")
 )
-
-type TestCaseHandler struct {
-	Name          string
-	SetHeaders    func(req *http.Request)
-	Payload       interface{}
-	Method        string
-	ReqUrl        string
-	BuildStub     func(input interface{}, stubs ...interface{})
-	CheckResponse func(recorder *httptest.ResponseRecorder, expected interface{})
-}
 
 func initUserHandler(ctrl *gomock.Controller, config *shrd_utils.BaseConfig) (UserHandler, *mock_svc.MockUserSvc) {
 	userSvc := mock_svc.NewMockUserSvc(ctrl)
@@ -162,7 +150,7 @@ func createUserImagesResp(userId uuid.UUID) []response.UserImageResp {
 
 func TestUserHandlers(t *testing.T) {
 	ctx := context.Background()
-	userHandlersTestCase := []TestCaseHandler{
+	userHandlersTestCase := []shrd_helper.TestCaseHandler{
 		{
 			Name: "SignUp (status code 201)",
 			Payload: request.SignUpReq{
@@ -336,7 +324,6 @@ func TestUserHandlers(t *testing.T) {
 
 				userSvc.EXPECT().GetUsers(ctx, createDefaultPaginationReq()).
 					Return(createUserWithPaginationResp()).Times(1)
-
 			},
 			CheckResponse: func(recorder *httptest.ResponseRecorder, expected interface{}) {
 				resp := shrd_utils.Response{}
@@ -480,7 +467,7 @@ func TestUserHandlers(t *testing.T) {
 			},
 		},
 		{
-			Name:   "GetUserImages",
+			Name:   "GetUserImages (status code 200)",
 			ReqUrl: fmt.Sprintf("/api/user/%s/image", USER_ID),
 			SetHeaders: func(req *http.Request) {
 				shrd_helper.SetHeaderApplicationJson(req)
@@ -503,6 +490,23 @@ func TestUserHandlers(t *testing.T) {
 				assert.Equal(t, USER_ID.String(), resp.Data.([]interface{})[1].(map[string]interface{})["userId"])
 			},
 		},
+		{
+			Name:   "Not found route (status code 404)",
+			ReqUrl: "/api/user/test/xxx",
+			SetHeaders: func(req *http.Request) {
+				shrd_helper.SetHeaderApplicationJson(req)
+			},
+			Method:    GET,
+			BuildStub: func(input interface{}, stubs ...interface{}) {},
+			CheckResponse: func(recorder *httptest.ResponseRecorder, expected interface{}) {
+				resp := shrd_utils.Response{}
+
+				shrd_helper.ParseResponseBody(recorder.Body, &resp)
+
+				shrd_helper.CheckResponse404(t, resp)
+				assert.Nil(t, resp.Data)
+			},
+		},
 	}
 
 	r := chi.NewRouter()
@@ -516,32 +520,11 @@ func TestUserHandlers(t *testing.T) {
 	userHanlder, userSvc := initUserHandler(ctrl, config)
 	userHanlder.SetupUserRoutes(r)
 
-	var req *http.Request
-	var err error
-
 	for i := range userHandlersTestCase {
 		tc := userHandlersTestCase[i]
 
-		recorder := httptest.NewRecorder()
-		input := tc.Payload
-		tc.BuildStub(input, userSvc)
-
-		formData, isFormData := input.(*bytes.Buffer)
-		if isFormData {
-			req, err = http.NewRequest(tc.Method, tc.ReqUrl, formData)
-			assert.NoError(t, err)
-		} else {
-			body, err := json.Marshal(input)
-			assert.NoError(t, err)
-			req, err = http.NewRequest(tc.Method, tc.ReqUrl, bytes.NewReader(body))
-			assert.NoError(t, err)
-		}
-
-		if tc.SetHeaders != nil {
-			tc.SetHeaders(req)
-		}
-
-		r.ServeHTTP(recorder, req)
-		tc.CheckResponse(recorder, input)
+		t.Run(tc.Name, func(t *testing.T) {
+			shrd_helper.SetupRequest(t, r, tc, userSvc)
+		})
 	}
 }

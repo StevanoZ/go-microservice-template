@@ -28,15 +28,18 @@ migrateDown:
 migrateDown1:
 	migrate -path db/migration -database ${POSTGRESQL_URL} -verbose down 1
 
+mockHandler:
+	mockgen -package mock_handler -destination handler/mock/notification_handler_mock.go -source=handler/notification_handler.go
+
 mockSvc:
-	mockgen -package mock_svc -destination service/mock/user_service_mock.go -source=service/user_service.go
+	mockgen -package mock_svc -destination service/mock/notification_service_mock.go -source=service/notification_service.go
 
 mockRepo:
 	mockgen -package mock_user_repo -destination db/user/sqlc/mock/user_repository_mock.go -source=db/user/sqlc/user_repository.go
 
 test:
 	go test -v -covermode=atomic -race -coverpkg=./... ./... \
-	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" > coverage.out && rm coverage.out.tmp && \
+	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" | grep -v "main.go" > coverage.out && rm coverage.out.tmp && \
 	go tool cover -func coverage.out
 
 build:
@@ -48,5 +51,10 @@ start:
 q2c:
 	sqlc generate
 
-.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test
+checkLint:
+	golangci-lint run ./... -v
 
+fixLint:
+	golangci-lint run --fix
+
+.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint

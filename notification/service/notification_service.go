@@ -7,6 +7,7 @@ import (
 
 	"github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
+	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
@@ -30,7 +31,7 @@ func NewNotificationSvc(
 }
 
 func (s *NotificationSvcImpl) ListenAndSendEmail(ctx context.Context, isEndlessly bool) {
-	s.messageBrokerClient.ListenEvent(message.EMAIL_TOPIC, func(payload any, errMsg error, close func()) {
+	err := s.messageBrokerClient.ListenEvent(message.EMAIL_TOPIC, func(payload any, errMsg error, close func()) {
 		if !isEndlessly {
 			close()
 		}
@@ -51,11 +52,13 @@ func (s *NotificationSvcImpl) ListenAndSendEmail(ctx context.Context, isEndlessl
 				fmt.Println("failed when parsing message: ", err)
 			} else {
 				fmt.Println("send otp code to email: ", otpPayload.Email)
-				s.emailSvc.SendVerifyOtp(ctx, message.OtpPayload{
+				err := s.emailSvc.SendVerifyOtp(ctx, message.OtpPayload{
 					Email:   otpPayload.Email,
 					OtpCode: otpPayload.OtpCode,
 				})
+				shrd_utils.LogIfError(err)
 			}
 		}
 	})
+	shrd_utils.LogIfError(err)
 }

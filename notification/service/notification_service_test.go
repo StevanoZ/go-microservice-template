@@ -91,5 +91,4 @@ func TestNotificationSvc(t *testing.T) {
 
 		notificationSvc.ListenAndSendEmail(ctx, false)
 	})
-
 }
