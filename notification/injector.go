@@ -4,11 +4,14 @@
 package main
 
 import (
+	"github.com/StevanoZ/dv-notification/app"
+	"github.com/StevanoZ/dv-notification/handler"
 	"github.com/StevanoZ/dv-notification/service"
 	kafka_client "github.com/StevanoZ/dv-shared/kafka"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/wire"
 	"github.com/sendgrid/sendgrid-go"
 )
@@ -27,8 +30,21 @@ var emailSet = wire.NewSet(
 	shrd_service.NewEmailSvc,
 )
 
-func InitializedApp(config *shrd_utils.BaseConfig) (service.NotificationSvc, error) {
-	wire.Build(msgBrokerSet, emailSet, service.NewNotificationSvc)
+var notificationSet = wire.NewSet(
+	service.NewNotificationSvc,
+	handler.NewNotificationHandler,
+)
+
+func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (
+	app.Server,
+	error,
+) {
+	wire.Build(
+		msgBrokerSet,
+		emailSet,
+		notificationSet,
+		app.NewServer,
+	)
 
 	return nil, nil
 }

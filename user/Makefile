@@ -36,7 +36,7 @@ mockRepo:
 
 test:
 	go test -v -covermode=atomic -race -coverpkg=./... ./... \
-	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" > coverage.out && rm coverage.out.tmp && \
+	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" | grep -v "main.go" > coverage.out && rm coverage.out.tmp && \
 	go tool cover -func coverage.out
 
 build:
@@ -48,5 +48,10 @@ start:
 q2c:
 	sqlc generate
 
-.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test
+checkLint:
+	golangci-lint run ./... -v
 
+fixLint:
+	golangci-lint run --fix
+
+.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint

@@ -118,7 +118,6 @@ func (h *UserHandlerImpl) ResendOtp(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandlerImpl) UploadImages(w http.ResponseWriter, r *http.Request) {
 	userId := shrd_utils.ValidateUrlParamUUID(r, "id")
 	err := r.ParseMultipartForm(5242880)
-
 	if err != nil {
 		shrd_utils.PanicIfError(shrd_utils.CustomErrorWithTrace(err, "failed when parsing form", 400))
 	}

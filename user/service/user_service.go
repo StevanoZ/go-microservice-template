@@ -26,6 +26,8 @@ import (
 	"github.com/StevanoZ/dv-user/dtos/response"
 )
 
+const active = "active"
+
 type UserSvc interface {
 	SignUp(ctx context.Context, input request.SignUpReq) response.UserResp
 	LogIn(cxt context.Context, input request.LogInReq) response.UserWithTokenResp
@@ -80,11 +82,12 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 		if user.Email != "" {
 			return shrd_utils.CustomError("email already in used", 400)
 		}
-		hashedPassword, err := shrd_utils.HashedPassword(input.Password)
 
+		hashedPassword, err := shrd_utils.HashedPassword(input.Password)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when hashing password", 400)
 		}
+
 		input.ID = uuid.New()
 		input.Password = hashedPassword
 		otpCode := shrd_utils.RandomInt(0, 999999)
@@ -98,10 +101,11 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 		userResp = mapping.ToUserResp(user)
 
 		go func() {
-			s.msgBrokerClient.SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+			err := s.msgBrokerClient.SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
 				Email:   user.Email,
 				OtpCode: int(user.OtpCode),
 			})
+			shrd_utils.LogIfError(err)
 		}()
 
 		go func() {
@@ -128,7 +132,6 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 
 		uTx := s.userRepo.WithTx(tx)
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
@@ -183,7 +186,6 @@ func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input re
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		user, err := uTx.FindUserById(ctx, userId)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
@@ -217,19 +219,19 @@ func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input re
 
 	return userResp
 }
+
 func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq) response.UserWithTokenResp {
 	userWithTokenResp := response.UserWithTokenResp{}
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
 		}
 
-		if user.Status == "active" {
+		if user.Status == active {
 			return shrd_utils.CustomError("invalid request", 400)
 		}
 
@@ -244,7 +246,6 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		}
 
 		otpCode, err := strconv.Atoi(input.OtpCode)
-
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "invalid otp code", 400)
 		}
@@ -261,7 +262,7 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		params := mapping.ToUpdateUserParams(user)
 		params.OtpCode = 0
 		params.AttemptLeft = 0
-		params.Status = "active"
+		params.Status = active
 
 		user, err = uTx.UpdateUser(ctx, params)
 
@@ -276,7 +277,6 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 			Email:  user.Email,
 			Status: user.Status,
 		}, s.config.AccessTokenDuration)
-
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when creating token", 422)
 		}
@@ -299,13 +299,12 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 		uTx := s.userRepo.WithTx(tx)
 
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
 		}
 
-		if user.Status == "active" {
+		if user.Status == active {
 			return shrd_utils.CustomError("invalid request", 400)
 		}
 
@@ -330,21 +329,21 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 		}
 
 		go func() {
-			s.msgBrokerClient.SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+			err := s.msgBrokerClient.SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
 				Email:   user.Email,
 				OtpCode: int(user.OtpCode),
 			})
+			shrd_utils.LogIfError(err)
 		}()
 
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
-
 }
 
 func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileHeader, userId uuid.UUID) []response.UserImageResp {
-	var userImagesResp = make([]response.UserImageResp, len(files))
+	userImagesResp := make([]response.UserImageResp, len(files))
 
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
@@ -371,7 +370,6 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 				filepath := fmt.Sprintf("users/%s/%s", userId, newFilename)
 
 				url, err := s.fileSvc.UploadPrivateFile(ctx, file, filepath)
-
 				if err != nil {
 					return err
 				}
@@ -409,7 +407,7 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 	go func() {
 		ctx := context.Background()
 		ewg := errgroup.Group{}
-		shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+		err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 			uTx := s.userRepo.WithTx(tx)
 			user, err := uTx.FindUserWithImages(ctx, userId)
 			if err != nil {
@@ -417,7 +415,11 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 			}
 
 			userImages := []user_db.UserImage{}
-			json.Unmarshal(user.Images, &userImages)
+
+			err = json.Unmarshal(user.Images, &userImages)
+			if err != nil {
+				return err
+			}
 
 			hasMainImage := false
 			mainImageUrl := ""
@@ -459,8 +461,8 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 				fmt.Println("success set main image", mainImageUrl)
 			}
 			return nil
-
 		})
+		shrd_utils.LogIfError(err)
 	}()
 
 	go func() {
@@ -478,7 +480,6 @@ func (s *UserSvcImpl) GetUserImages(ctx context.Context, userId uuid.UUID) []res
 
 	data, err := s.cacheSvc.GetOrSet(ctx, shrd_utils.BuildCacheKey(utils.USER_KEY, userId.String(), "GetUserImages"), func() any {
 		userImages, err := s.userRepo.FindUserImagesByUserId(ctx, userId)
-
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when finding user images", 400)
 		}
@@ -506,7 +507,7 @@ func (s *UserSvcImpl) GetUserImages(ctx context.Context, userId uuid.UUID) []res
 	})
 
 	shrd_utils.PanicIfError(err)
-	shrd_utils.ConvertInterface(data, &userImagesResp)
+	shrd_utils.ConvertInterfaceP(data, &userImagesResp)
 
 	return userImagesResp
 }
@@ -519,7 +520,6 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 
 		ewg := errgroup.Group{}
 		user, err := uTx.FindUserWithImages(ctx, userId)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
@@ -527,7 +527,10 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 
 		userImages := []user_db.UserImage{}
 
-		json.Unmarshal(user.Images, &userImages)
+		err = json.Unmarshal(user.Images, &userImages)
+		if err != nil {
+			return shrd_utils.CustomErrorWithTrace(err, "failed when unmarshal", 404)
+		}
 
 		var newMainImageUrl string
 		var newMainImagePath string
@@ -556,7 +559,6 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 				ID:     imageId,
 				IsMain: true,
 			})
-
 			if err != nil {
 				return err
 			}
@@ -598,12 +600,10 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 }
 
 func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId uuid.UUID) {
-
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		ewg := errgroup.Group{}
 		image, err := uTx.FindUserImageById(ctx, imageId)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			shrd_utils.PanicIfError(shrd_utils.CustomErrorWithTrace(err, "image not found", 404))
@@ -677,7 +677,7 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 			return shrd_utils.CustomErrorWithTrace(err, "failed when finding user", 400)
 		}
 
-		var usersResp = make([]response.UserResp, len(users))
+		usersResp := make([]response.UserResp, len(users))
 		for i := range users {
 			index := i
 
@@ -707,7 +707,7 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 	})
 
 	shrd_utils.PanicIfError(err)
-	shrd_utils.ConvertInterface(data, &usersPaginationResp)
+	shrd_utils.ConvertInterfaceP(data, &usersPaginationResp)
 
 	return usersPaginationResp
 }
@@ -717,7 +717,6 @@ func (s *UserSvcImpl) GetUser(ctx context.Context, userId uuid.UUID) response.Us
 	userWithImagesResp := response.UserWithImagesResp{}
 	data, err := s.cacheSvc.GetOrSet(ctx, shrd_utils.BuildCacheKey(utils.USER_KEY, userId.String(), "GetUser"), func() any {
 		user, err := s.userRepo.FindUserWithImages(ctx, userId)
-
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "user not found", 404)
@@ -730,7 +729,6 @@ func (s *UserSvcImpl) GetUser(ctx context.Context, userId uuid.UUID) response.Us
 			path := userWithImagesResp.Images[index].ImagePath
 
 			ewg.Go(func() error {
-
 				if path != "" {
 					preSignedUrl, err := s.fileSvc.GetPreSignUrl(ctx, path)
 					if err != nil {
@@ -756,7 +754,7 @@ func (s *UserSvcImpl) GetUser(ctx context.Context, userId uuid.UUID) response.Us
 	})
 
 	shrd_utils.PanicIfError(err)
-	shrd_utils.ConvertInterface(data, &userWithImagesResp)
+	shrd_utils.ConvertInterfaceP(data, &userWithImagesResp)
 
 	return userWithImagesResp
 }

@@ -50,5 +50,6 @@ func TestStartServer(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 	p, _ := os.FindProcess(os.Getpid())
-	p.Signal(syscall.SIGINT)
+	err := p.Signal(syscall.SIGINT)
+	assert.NoError(t, err)
 }

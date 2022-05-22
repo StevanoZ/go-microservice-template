@@ -51,7 +51,9 @@ func ToUserImageResp(image user_db.UserImage) response.UserImageResp {
 func ToUserWithImagesResp(user user_db.FindUserWithImagesRow) response.UserWithImagesResp {
 	images := []user_db.UserImage{}
 	imagesResp := []response.UserImageResp{}
-	json.Unmarshal(user.Images, &images)
+
+	err := json.Unmarshal(user.Images, &images)
+	shrd_utils.PanicIfAppError(err, "failed when unmarshal", 422)
 
 	for _, img := range images {
 		if img.ID != shrd_utils.DEFAULT_UUID {

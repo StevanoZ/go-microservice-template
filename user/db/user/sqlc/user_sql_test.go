@@ -14,19 +14,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const imageURL = "http://test/image-url"
+
 func SetUpDB() *sql.DB {
 	config := shrd_utils.LoadBaseConfig("../../../app", "test")
 	return shrd_utils.ConnectDB(config.DBDriver, config.DBSource)
 }
 
-func CleanUpDB(DB *sql.DB) {
-	DB.ExecContext(context.Background(), "DELETE FROM user_image")
-	DB.ExecContext(context.Background(), "DELETE FROM public.user")
-	//	DB.Exec(schema.UserDBSchema)
+func CleanUpDB(t *testing.T, DB *sql.DB) {
+	_, err := DB.ExecContext(context.Background(), "DELETE FROM user_image")
+	assert.NoError(t, err)
+	_, err = DB.ExecContext(context.Background(), "DELETE FROM public.user")
+	assert.NoError(t, err)
 }
 
-func InitUserRepo(DB *sql.DB) UserRepo {
-	CleanUpDB(DB)
+func InitUserRepo(t *testing.T, DB *sql.DB) UserRepo {
+	CleanUpDB(t, DB)
 	return NewUserRepo(DB)
 }
 
@@ -65,13 +68,13 @@ func createUsersMock(userRepo UserRepo) {
 					AttemptLeft: 0,
 					Status:      "active",
 				}
-				userRepo.UpdateUser(ctx, updateUserParams)
+				_, err := userRepo.UpdateUser(ctx, updateUserParams)
+				shrd_utils.LogIfError(err)
 			}
 		}(i)
 
 	}
 	wg.Wait()
-
 }
 
 func createkUserWithImagesMock(userRepo UserRepo) User {
@@ -87,13 +90,14 @@ func createkUserWithImagesMock(userRepo UserRepo) User {
 			if index == 4 {
 				isMain = true
 			}
-			userRepo.CreateUserImage(ctx, CreateUserImageParams{
+			_, err := userRepo.CreateUserImage(ctx, CreateUserImageParams{
 				ID:        uuid.New(),
 				IsMain:    isMain,
 				UserID:    user.ID,
 				ImageUrl:  fmt.Sprintf("http://test/image-url/image-%s", strconv.Itoa(index+1)),
 				ImagePath: "http://test/image-path",
 			})
+			shrd_utils.LogIfError(err)
 		}(i)
 	}
 	wg.Wait()
@@ -126,11 +130,12 @@ func createMockUserImage(userRepo UserRepo, userId uuid.UUID) []UserImage {
 	wg.Wait()
 	return userImages
 }
+
 func TestCreateUser(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	params := buildCreateUserParams()
 	user, err := userRepo.CreateUser(context.Background(), params)
 
@@ -146,7 +151,7 @@ func TestUpdateUser(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	createParam := buildCreateUserParams()
 	user, err := userRepo.CreateUser(context.Background(), createParam)
@@ -172,7 +177,7 @@ func TestUpdateUser(t *testing.T) {
 func TestGetUsersAndPagination(t *testing.T) {
 	DB := SetUpDB()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	createUsersMock(userRepo)
 
 	// should filter by default by status = 'active'
@@ -251,20 +256,19 @@ func TestCreateUserImage(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	user := createUserMock(userRepo)
 
-	imageUrl := "http://test/image-url"
 	userImage, err := userRepo.CreateUserImage(context.Background(), CreateUserImageParams{
 		ID:        uuid.New(),
 		UserID:    user.ID,
-		ImageUrl:  imageUrl,
+		ImageUrl:  imageURL,
 		ImagePath: "http://test/image-path",
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, user.ID, userImage.UserID)
-	assert.Equal(t, imageUrl, userImage.ImageUrl)
+	assert.Equal(t, imageURL, userImage.ImageUrl)
 	assert.Equal(t, false, userImage.IsMain)
 }
 
@@ -272,14 +276,13 @@ func TestUpdateUserImage(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	user := createUserMock(userRepo)
 
-	imageUrl := "http://test/image-url"
 	userImage, err := userRepo.CreateUserImage(context.Background(), CreateUserImageParams{
 		ID:        uuid.New(),
 		UserID:    user.ID,
-		ImageUrl:  imageUrl,
+		ImageUrl:  imageURL,
 		ImagePath: "http://test/image-path",
 	})
 
@@ -291,26 +294,24 @@ func TestUpdateUserImage(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, true, userImage.IsMain)
-
 }
 
 func TestUpdateUserMainImage(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	user := createUserMock(userRepo)
 
-	imageUrl := "http://test/image-url"
 	imagePath := "http://test/image-path"
 
 	updatedUser, err := userRepo.UpdateUserMainImage(context.Background(), UpdateUserMainImageParams{
 		ID:            user.ID,
-		MainImageUrl:  imageUrl,
+		MainImageUrl:  imageURL,
 		MainImagePath: imagePath,
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, imageUrl, updatedUser.MainImageUrl)
+	assert.Equal(t, imageURL, updatedUser.MainImageUrl)
 	assert.Equal(t, imagePath, updatedUser.MainImagePath)
 }
 
@@ -318,7 +319,7 @@ func TestFindUserById(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user1 := createUserMock(userRepo)
 
@@ -332,7 +333,7 @@ func TestFindUserEmail(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user1 := createUserMock(userRepo)
 
@@ -346,7 +347,7 @@ func TestFindUserWithImages(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 	user := createkUserWithImagesMock(userRepo)
 
 	userWithImages, err := userRepo.FindUserWithImages(context.Background(), user.ID)
@@ -358,11 +359,12 @@ func TestFindUserWithImages(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 5, len(images))
 }
+
 func TestDeleteUser(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user1 := createUserMock(userRepo)
 
@@ -377,14 +379,13 @@ func TestDeleteUser(t *testing.T) {
 	_, err = userRepo.FindUserById(context.Background(), user1.ID)
 
 	assert.Equal(t, sql.ErrNoRows, err)
-
 }
 
 func TestFindUserImageById(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user := createUserMock(userRepo)
 	images := createMockUserImage(userRepo, user.ID)
@@ -399,7 +400,7 @@ func TestFindUserImageById(t *testing.T) {
 func TestFindImagesByUserId(t *testing.T) {
 	DB := SetUpDB()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user := createUserMock(userRepo)
 	createMockUserImage(userRepo, user.ID)
@@ -424,7 +425,7 @@ func TestDeleteUserImage(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()
 
-	userRepo := InitUserRepo(DB)
+	userRepo := InitUserRepo(t, DB)
 
 	user := createUserMock(userRepo)
 	images := createMockUserImage(userRepo, user.ID)
