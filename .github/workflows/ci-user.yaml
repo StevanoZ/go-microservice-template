@@ -86,7 +86,7 @@ jobs:
       - name: Update status pending
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
-          token: $TOKEN
+          token: ${{env.TOKEN}}
           status: "pending"
           name: code cov
 
@@ -142,7 +142,7 @@ jobs:
         if: needs.test.outputs.isPassMinCoverage == 'true'
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
-          token: $TOKEN
+          token: ${{env.TOKEN}}
           status: "success"
           name: code cov
           description: ${{needs.test.outputs.totalCoverage}}%
@@ -151,7 +151,7 @@ jobs:
         if: needs.test.outputs.isPassMinCoverage == 'false'
         uses: ouzi-dev/commit-status-updater@v1.1.0
         with:
-          token: $TOKEN
+          token: ${{env.TOKEN}}
           status: "error"
           name: code cov
           description: ${{needs.test.outputs.totalCoverage}}%

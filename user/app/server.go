@@ -39,7 +39,7 @@ func (s *ServerImpl) Start() {
 	s.route.Use(shrd_middleware.Recovery)
 	s.userHandler.SetupUserRoutes(s.route)
 
-	fmt.Println("server startedz")
+	fmt.Println("server started")
 
 	go func() {
 		err := http.ListenAndServe(fmt.Sprintf(":%s", s.config.ServerPort), s.route)
