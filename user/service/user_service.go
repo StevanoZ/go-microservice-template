@@ -351,8 +351,8 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 		go func() {
 			ctx := context.Background()
 			topic, err := s.pubSubClient.CreateTopicIfNotExists(ctx, message.EMAIL_TOPIC)
-			topic.EnableMessageOrdering = true
 			shrd_utils.LogIfError(err)
+			
 			err = s.pubSubClient.PublishTopics(ctx, []*pubsub.Topic{topic}, message.OtpPayload{
 				Email:   user.Email,
 				OtpCode: int(user.OtpCode),
