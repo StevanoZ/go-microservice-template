@@ -1,10 +1,10 @@
 # Golang Microservices (CI/CD)
-The technologies used are Golang, PostgreSql, Kafka, Redis, GCP. This app is now live on www.stevanoz.xyz (will be closed if the billing runs out).
+The technologies used are Golang, PostgreSql, GCP PubSub, Redis, GCP. This app is now live on www.stevanoz.xyz (will be closed if the billing runs out).
 For architecture I used clean architecture (best practice for testability). And sharing dependencies within apps (use public Go lib [share Go lib](https://github.com/StevanoZ/dv-shared)).
 
 This application has 2 services:
-* **User**. For API spec you can visit this url https://stevanoz.xyz/api/user/doc/
-* **Notification**. For API spec you can visit this url https://stevanoz.xyz/api/notification/doc/
+* **User**. For API spec you can visit this url https://dv-user-uokzsvx2wq-et.a.run.app/api/doc/
+* **Notification**. For API spec you can visit this url https://dv-notification-uokzsvx2wq-et.a.run.app/api/doc/
 
 
 ## How To Run This App
@@ -12,7 +12,7 @@ Make sure you already installed this tools on your local machine:
 * **Kubectl**. https://kubernetes.io/docs/tasks/tools
 * **Skaffold**. For live reloading while developing app. https://skaffold.dev/docs/install
 * **Google Cloud CLI**. For access, and manage k8s cluster. https://cloud.google.com/sdk/docs/install
-* **Postgres, Redis, Kafka**
+* **Postgres, Redis**
 * **Ingress-Nginx**. For routing purpose (You can install with or without helm). https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
 * **Fill environment variables**. Copy paste **test.env** and rename it to **app.env** in same folder (app). And replace the environment variables with your own environment variables. eg: DB_SOURCE replace with postgres url on your local machine.
 * **Add fake host for local machine**. eg: If you using VS Code, on your terminal type **code /etc/hosts** and add this before the end of section (bottom line) **127.0.0.1 stevanoz.dev.xyz**. This is the default set up, but you can change it for whatever domain you want such **127.0.0.1 your-tesing-domain.com**. If you change it, you also need to change ingress config in **infras/k8s-dev/ingress-svc.yaml** and replace **host: stevanoz.dev.xyz** to **host: your-tesing-domain.com**.
