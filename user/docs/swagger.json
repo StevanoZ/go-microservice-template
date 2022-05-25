@@ -12,7 +12,7 @@
       "variables": {
         "serverBaseUrl": {
           "description": "Server Base Url",
-          "default": "https://stevanoz.xyz",
+          "default": " https://dv-user-uokzsvx2wq-et.a.run.app",
           "enum": ["https://stevanoz.xyz", "http://stevanoz.dev.xyz"]
         }
       }

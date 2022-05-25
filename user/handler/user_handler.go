@@ -50,9 +50,9 @@ func (h *UserHandlerImpl) SetupUserRoutes(
 
 	route.Mount("/api/user", route)
 
-	opts := middleware.SwaggerUIOpts{SpecURL: "/api/user/swagger.json", Path: "/doc"}
+	opts := middleware.SwaggerUIOpts{SpecURL: "/swagger.json", Path: "/api/doc"}
 	sh := middleware.SwaggerUI(opts, nil)
-	route.Handle("/doc/*", sh)
+	route.Handle("/api/doc/*", sh)
 	route.Handle("/swagger.json", http.FileServer(http.Dir("./docs")))
 
 	route.Post("/sign-up", h.SignUp)
