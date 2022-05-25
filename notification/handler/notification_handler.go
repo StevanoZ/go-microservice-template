@@ -34,9 +34,9 @@ func (h *NotificationHandlerImpl) SetupUserRoutes(route *chi.Mux) {
 	shrd_utils.EnableCORS(route)
 	route.Mount("/api/notification", route)
 
-	opts := middleware.SwaggerUIOpts{SpecURL: "/api/notification/swagger.json", Path: "/doc"}
+	opts := middleware.SwaggerUIOpts{SpecURL: "/swagger.json", Path: "/api/doc"}
 	sh := middleware.SwaggerUI(opts, nil)
-	route.Handle("/doc/*", sh)
+	route.Handle("/api/doc/*", sh)
 	route.Handle("/swagger.json", http.FileServer(http.Dir("./docs")))
 
 	route.Get("/ping", h.Ping)

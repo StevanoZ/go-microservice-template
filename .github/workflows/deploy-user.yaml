@@ -32,24 +32,31 @@ jobs:
           project_id: ${{secrets.GCP_PROJECT_ID}}
           export_default_credentials: true # for authenticate cloud run
 
-      - name: Init GCP Cluster
-        uses: google-github-actions/get-gke-credentials@v0.7.0
-        with:
-          cluster_name: ${{ secrets.GCP_CLUSTER }}
-          location: ${{ secrets.GCP_ZONE }}
-          credentials: ${{ secrets.GCP_SA_KEY }}
+      # - name: Init GCP Cluster
+      #   uses: google-github-actions/get-gke-credentials@v0.7.0
+      #   with:
+      #     cluster_name: ${{ secrets.GCP_CLUSTER }}
+      #     location: ${{ secrets.GCP_ZONE }}
+      #     credentials: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Install kubectl
-        run: gcloud components install kubectl
+      # - name: Install kubectl
+      #   run: gcloud components install kubectl
 
       - name: Configure docker
         run: |
           gcloud --quiet auth configure-docker
       
-      - name: Fetch and re-populate env
+      # - name: Fetch and re-populate env
+      #   shell: bash
+      #   run: |
+      #     gcloud secrets versions access latest --secret=${{secrets.SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > user/app/temp.env && sed s/$USER_DB/DB_SOURCE/g user/app/temp.env > user/app/app.env
+      #     rm -rf user/app/temp.env
+      #     printf "\nSERVICE_NAME=$SERVICE_NAME" >> user/app/app.env
+
+      - name: Fetch and re-populate env (Cloud Run)
         shell: bash
         run: |
-          gcloud secrets versions access latest --secret=${{secrets.SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > user/app/temp.env && sed s/$USER_DB/DB_SOURCE/g user/app/temp.env > user/app/app.env
+          gcloud secrets versions access latest --secret=${{secrets.CLOUD_RUN_SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > user/app/temp.env && sed s/$USER_DB/DB_SOURCE/g user/app/temp.env > user/app/app.env
           rm -rf user/app/temp.env
           printf "\nSERVICE_NAME=$SERVICE_NAME" >> user/app/app.env
       
@@ -67,9 +74,19 @@ jobs:
           docker push "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"
           docker push "gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:latest"
 
-      - name: Apply k8s deployments and services
-        run: |
-          kubectl apply -f infras/k8s/user-depl.yaml
-          kubectl apply -f infras/k8s/ingress-svc.yaml
-          kubectl set image deployments/dv-user-depl dv-user="gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"
-  
+      # - name: Apply k8s deployments and services
+      #   run: |
+      #     kubectl apply -f infras/k8s/user-depl.yaml
+      #     kubectl apply -f infras/k8s/ingress-svc.yaml
+      #     kubectl set image deployments/dv-user-depl dv-user="gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"
+      
+      - name: Deploy to Cloud Run
+        id: cloud-run
+        uses: google-github-actions/deploy-cloudrun@v0
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: gcr.io/${{secrets.GCP_PROJECT_ID}}/${{env.SERVICE_NAME}}:${{ github.sha }}
+          region: ${{ secrets.GCP_REGION }}
+
+      - name: Show Output
+        run: echo ${{ steps.cloud-run.outputs.url }}

@@ -39,6 +39,7 @@ func (s *NotificationSvcImpl) ListenAndSendEmail(ctx context.Context) error {
 		return err
 	}
 
+	fmt.Println("started listening topic: ", message.EMAIL_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, s.config.ServiceName, topic, func(ctx context.Context, msg *pubsub.Message) {
 		var otpPayload message.OtpPayload
 
