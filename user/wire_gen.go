@@ -7,9 +7,10 @@
 package main
 
 import (
+	"cloud.google.com/go/pubsub"
 	"database/sql"
-	"github.com/StevanoZ/dv-shared/kafka"
 	"github.com/StevanoZ/dv-shared/middleware"
+	"github.com/StevanoZ/dv-shared/pubsub"
 	"github.com/StevanoZ/dv-shared/s3"
 	"github.com/StevanoZ/dv-shared/service"
 	"github.com/StevanoZ/dv-shared/token"
@@ -19,7 +20,6 @@ import (
 	"github.com/StevanoZ/dv-user/handler"
 	"github.com/StevanoZ/dv-user/service"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/wire"
@@ -35,22 +35,18 @@ func InitializedApp(route *chi.Mux, DB *sql.DB, config *shrd_utils.BaseConfig) (
 	}
 	presignClient := s3_client.PreSignClient(client)
 	fileSvc := s3_client.NewS3Client(client, presignClient, config)
-	producer, err := kafka_client.NewKafkaProducer(config)
+	pubsubClient, err := pubsub_client.NewGooglePubSub(config)
 	if err != nil {
 		return nil, err
 	}
-	consumer, err := kafka_client.NewKafkaConsumer(config)
-	if err != nil {
-		return nil, err
-	}
-	messageBrokerClient := kafka_client.NewKafkaClient(producer, consumer)
+	pubSubClient := pubsub_client.NewPubSubClient(config, pubsubClient)
 	redisClient := shrd_service.NewRedisClient(config)
 	cacheSvc := shrd_service.NewCacheSvc(config, redisClient)
 	maker, err := shrd_token.NewPasetoMaker(config)
 	if err != nil {
 		return nil, err
 	}
-	userSvc := service.NewUserSvc(userRepo, fileSvc, messageBrokerClient, cacheSvc, maker, config)
+	userSvc := service.NewUserSvc(userRepo, fileSvc, pubSubClient, cacheSvc, maker, config)
 	authMiddleware := shrd_middleware.NewAuthMiddleware(maker)
 	userHandler := handler.NewUserHandler(userSvc, authMiddleware)
 	server := app.NewServer(route, config, userHandler)
@@ -65,6 +61,6 @@ var userSet = wire.NewSet(user_db.NewUserRepo, service.NewUserSvc, shrd_middlewa
 
 var tokenSet = wire.NewSet(shrd_token.NewPasetoMaker)
 
-var messageBrokerSet = wire.NewSet(wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)), wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)), kafka_client.NewKafkaProducer, kafka_client.NewKafkaConsumer, kafka_client.NewKafkaClient)
+var pubSubSet = wire.NewSet(wire.Bind(new(pubsub_client.GooglePubSub), new(*pubsub.Client)), pubsub_client.NewGooglePubSub, pubsub_client.NewPubSubClient)
 
 var cacheSet = wire.NewSet(wire.Bind(new(shrd_service.RedisClient), new(*redis.Client)), shrd_service.NewRedisClient, shrd_service.NewCacheSvc)

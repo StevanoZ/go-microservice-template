@@ -57,4 +57,7 @@ checkLint:
 fixLint:
 	golangci-lint run --fix
 
-.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint
+sonarScan:
+	sonar-scanner -Dproject.settings=sonar-project-dev.properties
+
+.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint sonarScan

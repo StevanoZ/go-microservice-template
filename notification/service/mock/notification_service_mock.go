@@ -35,13 +35,15 @@ func (m *MockNotificationSvc) EXPECT() *MockNotificationSvcMockRecorder {
 }
 
 // ListenAndSendEmail mocks base method.
-func (m *MockNotificationSvc) ListenAndSendEmail(ctx context.Context, isEndlessly bool) {
+func (m *MockNotificationSvc) ListenAndSendEmail(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ListenAndSendEmail", ctx, isEndlessly)
+	ret := m.ctrl.Call(m, "ListenAndSendEmail", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // ListenAndSendEmail indicates an expected call of ListenAndSendEmail.
-func (mr *MockNotificationSvcMockRecorder) ListenAndSendEmail(ctx, isEndlessly interface{}) *gomock.Call {
+func (mr *MockNotificationSvcMockRecorder) ListenAndSendEmail(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenAndSendEmail", reflect.TypeOf((*MockNotificationSvc)(nil).ListenAndSendEmail), ctx, isEndlessly)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenAndSendEmail", reflect.TypeOf((*MockNotificationSvc)(nil).ListenAndSendEmail), ctx)
 }

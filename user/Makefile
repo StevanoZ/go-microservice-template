@@ -32,11 +32,11 @@ mockSvc:
 	mockgen -package mock_svc -destination service/mock/user_service_mock.go -source=service/user_service.go
 
 mockRepo:
-	mockgen -package mock_user_repo -destination db/user/sqlc/mock/user_repository_mock.go -source=db/user/sqlc/user_repository.go
+	mockgen -package mock_user_repo -destination db/user/sqlc/mock/user_repository_mock.go -source=db/user/sqlc/user_repository.go -aux_files github.com/StevanoZ/dv-user/db/user/sqlc=db/user/sqlc/querier.go
 
 test:
 	go test -v -covermode=atomic -race -coverpkg=./... ./... \
-	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" | grep -v "main.go" > coverage.out && rm coverage.out.tmp && \
+	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "main.go" | grep -v "_gen.go" > coverage.out && rm coverage.out.tmp && \
 	go tool cover -func coverage.out
 
 build:
@@ -54,4 +54,7 @@ checkLint:
 fixLint:
 	golangci-lint run --fix
 
-.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint
+sonarScan:
+	sonar-scanner -Dproject.settings=sonar-project-dev.properties
+
+.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint sonarScan

@@ -5,60 +5,53 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
 type NotificationSvc interface {
-	ListenAndSendEmail(ctx context.Context, isEndlessly bool)
+	ListenAndSendEmail(ctx context.Context) error
 }
 
 type NotificationSvcImpl struct {
-	messageBrokerClient shrd_service.MessageBrokerClient
-	emailSvc            shrd_service.EmailSvc
+	config       *shrd_utils.BaseConfig
+	emailSvc     shrd_service.EmailSvc
+	pubSubClient shrd_service.PubSubClient
 }
 
 func NewNotificationSvc(
-	msgBrokerClient shrd_service.MessageBrokerClient,
+	config *shrd_utils.BaseConfig,
+	pubSubClient shrd_service.PubSubClient,
 	emailSvc shrd_service.EmailSvc,
 ) NotificationSvc {
 	return &NotificationSvcImpl{
-		messageBrokerClient: msgBrokerClient,
-		emailSvc:            emailSvc,
+		config:       config,
+		pubSubClient: pubSubClient,
+		emailSvc:     emailSvc,
 	}
 }
 
-func (s *NotificationSvcImpl) ListenAndSendEmail(ctx context.Context, isEndlessly bool) {
-	err := s.messageBrokerClient.ListenEvent(message.EMAIL_TOPIC, func(payload any, errMsg error, close func()) {
-		if !isEndlessly {
-			close()
-		}
+func (s *NotificationSvcImpl) ListenAndSendEmail(ctx context.Context) error {
+	topic, err := s.pubSubClient.CreateTopicIfNotExists(ctx, message.EMAIL_TOPIC)
+	if err != nil {
+		return err
+	}
 
-		if errMsg != nil {
-			fmt.Println("failed when consuming message with topic: ", message.EMAIL_TOPIC)
-			return
-		}
+	return s.pubSubClient.PullMessages(ctx, s.config.ServiceName, topic, func(ctx context.Context, msg *pubsub.Message) {
+		var otpPayload message.OtpPayload
 
-		// TYPE MAYBE DIFFERENT DEPENDING ON THE BROKER
-		msg, _ := payload.(*kafka.Message)
+		err := json.Unmarshal(msg.Data, &otpPayload)
+		fmt.Println("unmarshall message data")
+		shrd_utils.LogIfError(err)
 
-		if string(msg.Key) == message.SEND_OTP_KEY {
-			var otpPayload message.OtpPayload
-			err := json.Unmarshal(msg.Value, &otpPayload)
+		fmt.Println("send otp code to email: ", otpPayload.Email)
+		err = s.emailSvc.SendVerifyOtp(ctx, message.OtpPayload{
+			Email:   otpPayload.Email,
+			OtpCode: otpPayload.OtpCode,
+		})
 
-			if err != nil {
-				fmt.Println("failed when parsing message: ", err)
-			} else {
-				fmt.Println("send otp code to email: ", otpPayload.Email)
-				err := s.emailSvc.SendVerifyOtp(ctx, message.OtpPayload{
-					Email:   otpPayload.Email,
-					OtpCode: otpPayload.OtpCode,
-				})
-				shrd_utils.LogIfError(err)
-			}
-		}
+		shrd_utils.LogIfError(err)
 	})
-	shrd_utils.LogIfError(err)
 }
