@@ -4,24 +4,30 @@
 package main
 
 import (
+	"cloud.google.com/go/pubsub"
 	"github.com/StevanoZ/dv-notification/app"
 	"github.com/StevanoZ/dv-notification/handler"
 	"github.com/StevanoZ/dv-notification/service"
-	kafka_client "github.com/StevanoZ/dv-shared/kafka"
+	pubsub_client "github.com/StevanoZ/dv-shared/pubsub"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/wire"
 	"github.com/sendgrid/sendgrid-go"
 )
 
-var msgBrokerSet = wire.NewSet(
-	wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)),
-	wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)),
-	kafka_client.NewKafkaProducer,
-	kafka_client.NewKafkaConsumer,
-	kafka_client.NewKafkaClient,
+// var msgBrokerSet = wire.NewSet(
+// 	wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)),
+// 	wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)),
+// 	kafka_client.NewKafkaProducer,
+// 	kafka_client.NewKafkaConsumer,
+// 	kafka_client.NewKafkaClient,
+// )
+
+var pubSubSet = wire.NewSet(
+	wire.Bind(new(pubsub_client.GooglePubSub), new(*pubsub.Client)),
+	pubsub_client.NewGooglePubSub,
+	pubsub_client.NewPubSubClient,
 )
 
 var emailSet = wire.NewSet(
@@ -40,7 +46,7 @@ func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (
 	error,
 ) {
 	wire.Build(
-		msgBrokerSet,
+		pubSubSet,
 		emailSet,
 		notificationSet,
 		app.NewServer,

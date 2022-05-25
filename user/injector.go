@@ -6,8 +6,9 @@ package main
 import (
 	"database/sql"
 
-	kafka_client "github.com/StevanoZ/dv-shared/kafka"
+	"cloud.google.com/go/pubsub"
 	shrd_middleware "github.com/StevanoZ/dv-shared/middleware"
+	pubsub_client "github.com/StevanoZ/dv-shared/pubsub"
 	s3_client "github.com/StevanoZ/dv-shared/s3"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_token "github.com/StevanoZ/dv-shared/token"
@@ -17,7 +18,6 @@ import (
 	"github.com/StevanoZ/dv-user/handler"
 	"github.com/StevanoZ/dv-user/service"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/wire"
@@ -42,12 +42,18 @@ var tokenSet = wire.NewSet(
 	shrd_token.NewPasetoMaker,
 )
 
-var messageBrokerSet = wire.NewSet(
-	wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)),
-	wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)),
-	kafka_client.NewKafkaProducer,
-	kafka_client.NewKafkaConsumer,
-	kafka_client.NewKafkaClient,
+// var messageBrokerSet = wire.NewSet(
+// 	wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)),
+// 	wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)),
+// 	kafka_client.NewKafkaProducer,
+// 	kafka_client.NewKafkaConsumer,
+// 	kafka_client.NewKafkaClient,
+// )
+
+var pubSubSet = wire.NewSet(
+	wire.Bind(new(pubsub_client.GooglePubSub), new(*pubsub.Client)),
+	pubsub_client.NewGooglePubSub,
+	pubsub_client.NewPubSubClient,
 )
 
 var cacheSet = wire.NewSet(
@@ -63,7 +69,7 @@ func InitializedApp(
 ) (app.Server, error) {
 	wire.Build(
 		fileset,
-		messageBrokerSet,
+		pubSubSet,
 		tokenSet,
 		userSet,
 		cacheSet,

@@ -73,7 +73,10 @@ func TestNotificationHandler(t *testing.T) {
 	}
 
 	t.Run("Listen for event", func(t *testing.T) {
-		notificationSvc.EXPECT().ListenAndSendEmail(ctx, false).Times(1)
-		notificationHandler.ListenEvent(ctx, false)
+		ctxCancel, cancel := context.WithCancel(ctx)
+		notificationSvc.EXPECT().ListenAndSendEmail(ctxCancel).Times(1)
+		err := notificationHandler.ListenEvent(ctxCancel)
+		assert.NoError(t, err)
+		cancel()
 	})
 }

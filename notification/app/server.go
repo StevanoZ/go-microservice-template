@@ -54,5 +54,8 @@ func (s *ServerImpl) Start() {
 }
 
 func (s *ServerImpl) ListenEvent(ctx context.Context) {
-	s.notificationHandler.ListenEvent(ctx, true)
+	go func() {
+		err := s.notificationHandler.ListenEvent(ctx)
+		shrd_utils.LogIfError(err)
+	}()
 }

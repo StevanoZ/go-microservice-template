@@ -12,7 +12,7 @@ import (
 
 type NotificationHandler interface {
 	Ping(w http.ResponseWriter, r *http.Request)
-	ListenEvent(ctx context.Context, isEndlessly bool)
+	ListenEvent(ctx context.Context) error
 	SetupUserRoutes(route *chi.Mux)
 }
 
@@ -46,6 +46,6 @@ func (h *NotificationHandlerImpl) SetupUserRoutes(route *chi.Mux) {
 	})
 }
 
-func (h *NotificationHandlerImpl) ListenEvent(ctx context.Context, isEndlessly bool) {
-	h.notificationSvc.ListenAndSendEmail(ctx, isEndlessly)
+func (h *NotificationHandlerImpl) ListenEvent(ctx context.Context) error {
+	return h.notificationSvc.ListenAndSendEmail(ctx)
 }

@@ -7,13 +7,13 @@
 package main
 
 import (
+	"cloud.google.com/go/pubsub"
 	"github.com/StevanoZ/dv-notification/app"
 	"github.com/StevanoZ/dv-notification/handler"
 	"github.com/StevanoZ/dv-notification/service"
-	"github.com/StevanoZ/dv-shared/kafka"
+	"github.com/StevanoZ/dv-shared/pubsub"
 	"github.com/StevanoZ/dv-shared/service"
 	"github.com/StevanoZ/dv-shared/utils"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/wire"
 	"github.com/sendgrid/sendgrid-go"
@@ -22,18 +22,14 @@ import (
 // Injectors from injector.go:
 
 func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (app.Server, error) {
-	producer, err := kafka_client.NewKafkaProducer(config)
+	client, err := pubsub_client.NewGooglePubSub(config)
 	if err != nil {
 		return nil, err
 	}
-	consumer, err := kafka_client.NewKafkaConsumer(config)
-	if err != nil {
-		return nil, err
-	}
-	messageBrokerClient := kafka_client.NewKafkaClient(producer, consumer)
-	client := shrd_service.NewSgClient(config)
-	emailSvc := shrd_service.NewEmailSvc(client, config)
-	notificationSvc := service.NewNotificationSvc(messageBrokerClient, emailSvc)
+	pubSubClient := pubsub_client.NewPubSubClient(config, client)
+	sendgridClient := shrd_service.NewSgClient(config)
+	emailSvc := shrd_service.NewEmailSvc(sendgridClient, config)
+	notificationSvc := service.NewNotificationSvc(config, pubSubClient, emailSvc)
 	notificationHandler := handler.NewNotificationHandler(notificationSvc)
 	server := app.NewServer(r, config, notificationHandler)
 	return server, nil
@@ -41,7 +37,7 @@ func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (app.Server, erro
 
 // injector.go:
 
-var msgBrokerSet = wire.NewSet(wire.Bind(new(kafka_client.KafkaProducer), new(*kafka.Producer)), wire.Bind(new(kafka_client.KafkaConsumer), new(*kafka.Consumer)), kafka_client.NewKafkaProducer, kafka_client.NewKafkaConsumer, kafka_client.NewKafkaClient)
+var pubSubSet = wire.NewSet(wire.Bind(new(pubsub_client.GooglePubSub), new(*pubsub.Client)), pubsub_client.NewGooglePubSub, pubsub_client.NewPubSubClient)
 
 var emailSet = wire.NewSet(wire.Bind(new(shrd_service.EmailClient), new(*sendgrid.Client)), shrd_service.NewSgClient, shrd_service.NewEmailSvc)
 

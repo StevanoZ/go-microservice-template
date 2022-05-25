@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/pubsub"
 	shrd_helper "github.com/StevanoZ/dv-shared/helper"
 	message "github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
@@ -58,18 +59,19 @@ func initUserSvc(ctrl *gomock.Controller, config *shrd_utils.BaseConfig) (
 	UserSvc,
 	*mock_user_repo.MockUserRepo,
 	*shrd_mock_svc.MockFileSvc,
-	*shrd_mock_svc.MockMessageBrokerClient,
+	*shrd_mock_svc.MockPubSubClient,
 	shrd_service.CacheSvc,
 ) {
-	msgBrokerClient := shrd_mock_svc.NewMockMessageBrokerClient(ctrl)
+	pubSubClient := shrd_mock_svc.NewMockPubSubClient(ctrl)
 	fileSvc := shrd_mock_svc.NewMockFileSvc(ctrl)
 	userRepo := mock_user_repo.NewMockUserRepo(ctrl)
 	tokenMaker, _ := shrd_token.NewPasetoMaker(config)
 	redisClient := shrd_service.NewRedisClientForTesting(config)
 	cacheSvc := shrd_service.NewCacheSvc(config, redisClient)
-	userSvc := NewUserSvc(userRepo, fileSvc, msgBrokerClient, cacheSvc, tokenMaker, config)
 
-	return userSvc, userRepo, fileSvc, msgBrokerClient, cacheSvc
+	userSvc := NewUserSvc(userRepo, fileSvc, pubSubClient, cacheSvc, tokenMaker, config)
+
+	return userSvc, userRepo, fileSvc, pubSubClient, cacheSvc
 }
 
 func setupAndMockTx(t *testing.T, DB *sql.DB, userRepo *mock_user_repo.MockUserRepo) {
@@ -234,7 +236,7 @@ func TestSignUp(t *testing.T) {
 
 	userSvc,
 		userRepo,
-		_, msgBrokerClient, _ := initUserSvc(ctrl, config)
+		_, pubSubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		var userId uuid.UUID
@@ -251,10 +253,13 @@ func TestSignUp(t *testing.T) {
 
 				return user, nil
 			})
-		msgBrokerClient.EXPECT().SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+
+		pubSubClient.EXPECT().CreateTopicIfNotExists(gomock.Any(), message.EMAIL_TOPIC).
+			Return(&pubsub.Topic{}, nil).Times(1)
+		pubSubClient.EXPECT().PublishTopics(gomock.Any(), gomock.AssignableToTypeOf([]*pubsub.Topic{}), message.OtpPayload{
 			Email:   EMAIL,
 			OtpCode: int(otpCode),
-		}).Return(nil).Times(1)
+		}, message.SEND_OTP_KEY).Return(nil).Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.SignUp(ctx, request.SignUpReq{Email: EMAIL, Username: USERNAME, Password: PASSWORD})
@@ -620,7 +625,7 @@ func TestResendOtp(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, _, msgBrokerClient, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, _, pubSubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
@@ -636,10 +641,12 @@ func TestResendOtp(t *testing.T) {
 				user.OtpCode = newOtpCode
 				user.AttemptLeft = params.AttemptLeft
 
-				msgBrokerClient.EXPECT().SendEvents([]string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+				pubSubClient.EXPECT().CreateTopicIfNotExists(gomock.Any(), message.EMAIL_TOPIC).
+					Return(&pubsub.Topic{}, nil).Times(1)
+				pubSubClient.EXPECT().PublishTopics(gomock.Any(), gomock.AssignableToTypeOf([]*pubsub.Topic{}), message.OtpPayload{
 					Email:   EMAIL,
 					OtpCode: int(newOtpCode),
-				}).Return(nil).Times(1)
+				}, message.SEND_OTP_KEY).Return(nil).Times(1)
 
 				return user, nil
 			}).Times(1)

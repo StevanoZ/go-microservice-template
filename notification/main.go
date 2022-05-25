@@ -16,6 +16,6 @@ func main() {
 	app, err := InitializedApp(r, config)
 	shrd_utils.LogIfError(err)
 
-	go app.ListenEvent(ctx)
+	app.ListenEvent(ctx)
 	app.Start()
 }

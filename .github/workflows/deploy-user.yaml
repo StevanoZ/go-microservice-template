@@ -52,6 +52,11 @@ jobs:
           gcloud secrets versions access latest --secret=${{secrets.SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > user/app/temp.env && sed s/$USER_DB/DB_SOURCE/g user/app/temp.env > user/app/app.env
           rm -rf user/app/temp.env
           printf "\nSERVICE_NAME=$SERVICE_NAME" >> user/app/app.env
+      
+      - name: Fetch service account
+        shell: bash
+        run: |
+          gcloud secrets versions access latest --secret=${{secrets.SA}} --project=${{secrets.GCP_PROJECT_ID}} > user/service-account.json
 
       - name: Build
         run: |
@@ -67,3 +72,4 @@ jobs:
           kubectl apply -f infras/k8s/user-depl.yaml
           kubectl apply -f infras/k8s/ingress-svc.yaml
           kubectl set image deployments/dv-user-depl dv-user="gcr.io/${{secrets.GCP_PROJECT_ID}}/$SERVICE_NAME:$GITHUB_SHA"
+  

@@ -46,12 +46,17 @@ jobs:
         run: |
           gcloud --quiet auth configure-docker
 
-      - name: Re-populate env
+      - name: Fetch and re-populate env
         shell: bash
         run: |
           gcloud secrets versions access latest --secret=${{secrets.SECRET}} --project=${{secrets.GCP_PROJECT_ID}} > notification/app/temp.env && sed s/$NOTIFICATION_DB/DB_SOURCE/g notification/app/temp.env > notification/app/app.env
           rm -rf notification/app/temp.env
           printf "\nSERVICE_NAME=$SERVICE_NAME" >> notification/app/app.env
+      
+      - name: Fetch service account
+        shell: bash
+        run: |
+          gcloud secrets versions access latest --secret=${{secrets.SA}} --project=${{secrets.GCP_PROJECT_ID}} > notification/service-account.json
       
       - name: Build
         run: |
