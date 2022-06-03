@@ -7,11 +7,13 @@ import (
 
 func main() {
 	r := chi.NewRouter()
-	config := shrd_utils.LoadBaseConfig("./app", "app")
+	config := shrd_utils.CheckAndSetConfig("./app", "app")
+
 	DB := shrd_utils.ConnectDB(config.DBDriver, config.DBSource)
+	shrd_utils.RunMigration(DB, config)
 
 	app, err := InitializedApp(r, DB, config)
-	shrd_utils.LogIfError(err)
+	shrd_utils.LogAndPanicIfError(err, "failed when starting app")
 
 	app.Start()
 }

@@ -1,0 +1,47 @@
+version: '3.9'
+services:
+  user:
+    container_name: user
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - '8080:8080'
+    volumes:
+      - type: bind
+        source: ./
+        target: /app
+      - /app/tmp
+  
+    depends_on:
+      - postgres
+      - redis
+    entrypoint:
+      [
+        "/app/wait-for.sh",
+        "postgres:5432",
+        "--",
+        "/app/start.sh"
+      ]
+    command: ["air"]
+
+  postgres:
+    container_name: user-pg
+    image: postgres:14-alpine
+    ports:
+      - '5555:5432'
+    volumes:
+      - data:/data/postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: dv_user
+    
+  redis:
+    container_name: user-redis
+    image: redis
+    ports:
+      - '6868:6379'
+
+volumes:
+  data:

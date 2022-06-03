@@ -13,11 +13,35 @@ on:
       - 'notification/**'
 
 jobs:
+  commit:
+    name: Check Commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Commit Type
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([\w ]+\))?: [\w\-\/ ]+$'
+          flags: 'gm'
+          error: 'Your commit messages not follow the conventional commits'
+          excludeDescription: 'true'
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GIT_TOKEN }}
+      - name: Check Line Length
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '^[^#].{5,74}'
+          error: 'The maximum line length of 74 characters is exceeded.'
+          excludeDescription: 'true'
+          excludeTitle: 'true'
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GIT_TOKEN }}
+
   lint:
     name: Run Lint
     runs-on: ubuntu-latest
+    needs: [commit]
     steps:
-      - name: Check out code into the Go module directory
+      - name: Check out code into directory
         uses: actions/checkout@v3
 
       - name: Set up Go 1.x
@@ -40,6 +64,7 @@ jobs:
   test:
     name: Run Test
     runs-on: ubuntu-latest
+    needs: [commit]
     env:
       SERVICE_NAME: dv-notification
       BUCKET: ${{secrets.BUCKET}}
@@ -74,7 +99,7 @@ jobs:
           - 6379:6379
 
     steps:
-      - name: Check out code into the Go module directory
+      - name: Check out code into directory
         uses: actions/checkout@v3
 
       - name: Set up Go 1.x
@@ -123,7 +148,15 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: code coverage report
-          path: user/coverage.out
+          path: notification/coverage.out
+      
+      - name: Analyze with SonarCloud
+        uses: sonarsource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: notification
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NOTIFICATION }}
       
   checker:
     name: Check total coverage and publish cov badge
@@ -135,7 +168,7 @@ jobs:
       TOKEN: ${{secrets.GIT_TOKEN}}
 
     steps:
-      - name: Check out code into the Go module directory
+      - name: Check out code into directory
         uses: actions/checkout@v3
 
       - name: Update status success

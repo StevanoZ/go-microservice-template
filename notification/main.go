@@ -10,11 +10,12 @@ import (
 
 func main() {
 	r := chi.NewRouter()
-	config := shrd_utils.LoadBaseConfig("./app", "app")
+	config := shrd_utils.CheckAndSetConfig("./app", "app")
+
 	ctx := context.Background()
 
 	app, err := InitializedApp(r, config)
-	shrd_utils.LogIfError(err)
+	shrd_utils.LogAndPanicIfError(err, "failed when starting app")
 
 	app.ListenEvent(ctx)
 	app.Start()
