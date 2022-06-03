@@ -8,17 +8,23 @@ This application has 2 services:
 
 
 ## How To Run This App
+**Via Kubernetes**
 Make sure you already installed this tools on your local machine:
 * **Kubectl**. https://kubernetes.io/docs/tasks/tools
 * **Skaffold**. For live reloading while developing app. https://skaffold.dev/docs/install
 * **Google Cloud CLI**. For access, and manage k8s cluster. https://cloud.google.com/sdk/docs/install
-* **Postgres, Redis**
+* **Postgres, Redis, GCP Pubsub**
 * **Ingress-Nginx**. For routing purpose (You can install with or without helm). https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
 * **Fill environment variables**. Copy paste **test.env** and rename it to **app.env** in same folder (app). And replace the environment variables with your own environment variables. eg: DB_SOURCE replace with postgres url on your local machine.
 * **Add fake host for local machine**. eg: If you using VS Code, on your terminal type **code /etc/hosts** and add this before the end of section (bottom line) **127.0.0.1 stevanoz.dev.xyz**. This is the default set up, but you can change it for whatever domain you want such **127.0.0.1 your-tesing-domain.com**. If you change it, you also need to change ingress config in **infras/k8s-dev/ingress-svc.yaml** and replace **host: stevanoz.dev.xyz** to **host: your-tesing-domain.com**.
 * **Run Migration Scripts**. Only need for first time, when you clone or copy this project. eg: In your PostgreSql create 2 databases **(dv_user && dv_notification)** and run all migration script in user and notification folder -> **migrate -path db/migration -database ${YOUR_POSTGRESQL_URL} -verbose up**.
 
 If everything is installed and you already fill environment variables and also ingress-nginx setup. In root folder just type **skaffold dev** and the application will run.
+
+**Via Docker Compose**
+* Install GCP Pubsub locally. And make sure run on localhost:8085.
+* Navigation to service project (user/notification) and run **docker compose up -d --build**
+
 
 **Summary total code coverage (update automatically)**:
 * **User**. ![cod cov](http://dv-bucketz.storage.googleapis.com/dv-user/codcov.svg)
@@ -31,6 +37,14 @@ Example for success (>= 90%):
 Example for failed (< 90%). For this example I have set the threshold to 97%. That's why the test failed:
 <img width="959" alt="Failed Coverage" src="https://user-images.githubusercontent.com/51188834/169705481-6c2b5489-5ee4-44e1-a4a5-ee7c71481433.png">
 
+**Sonar Cloud Analysis<br />**
+<img width="919" alt="sonar-cloud" src="https://user-images.githubusercontent.com/51188834/171788257-6c1075f6-ecc5-4189-b7e4-34896e26f8f4.png">
+
+
+**Conventional Commits Checker (CI Pipeline)<br />**
+<img width="919" alt="check-cc-1" src="https://user-images.githubusercontent.com/51188834/171788127-e0e9843a-1334-433e-af89-5bd295c9d28f.png">
+
+<img width="925" alt="check-cc-2" src="https://user-images.githubusercontent.com/51188834/171788137-e2ca2f7c-3b1a-48f3-b7f5-fe4a26abdfa5.png">
 
 ## Tech Related
 
