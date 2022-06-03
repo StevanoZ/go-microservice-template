@@ -39,7 +39,7 @@ mockRepo:
 
 test:
 	go test -v -covermode=atomic -race -coverpkg=./... ./... \
-	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "_gen.go" | grep -v "main.go" > coverage.out && rm coverage.out.tmp && \
+	-coverprofile coverage.out.tmp && cat coverage.out.tmp | grep -v "_mock.go" | grep -v "injector.go" | grep -v "_gen.go" > coverage.out && rm coverage.out.tmp && \
 	go tool cover -func coverage.out
 
 build:
@@ -58,6 +58,9 @@ fixLint:
 	golangci-lint run --fix
 
 sonarScan:
-	sonar-scanner -Dproject.settings=sonar-project-dev.properties
+	sonar-scanner -Dproject.settings=sonar-project-local.properties
 
-.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint sonarScan
+startPubSub:
+	gcloud beta emulators pubsub start --project=stevanoz-dv
+
+.PHONY: migrateInit createDb migrateUp migrateUp1 migrateDown migrateDown1 q2c mockSvc mockRepo start build test checkLint fixLint sonarScan startPubSub

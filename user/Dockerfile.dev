@@ -1,4 +1,4 @@
-FROM golang:1.18
+FROM golang:1.18-alpine3.15
 
 WORKDIR /app
 
@@ -10,6 +10,8 @@ RUN go mod download
 COPY ./ ./
 COPY *.json ./
 
+RUN apk --no-cache add curl
 RUN curl -sSfL https://raw.githubusercontent.com/cosmtrek/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
-CMD [ "air" ]
+EXPOSE 8080
+

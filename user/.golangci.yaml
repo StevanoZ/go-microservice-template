@@ -20,3 +20,4 @@ run:
     - injector.go
   build-tags:
     - wireinject
+  tests: false

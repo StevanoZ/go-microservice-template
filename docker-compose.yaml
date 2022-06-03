@@ -1,0 +1,6 @@
+version: "3.9"
+services:
+  pub-sub-emulator:
+    image: storytel/gcp-pubsub-emulator:latest
+    ports:
+      - "8085:8080"

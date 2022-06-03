@@ -1,5 +1,5 @@
 infras/pvc/
 **/go.sum
-**/app.env
 **/.scannerwork
 **/service-account.json
+**/tmp
