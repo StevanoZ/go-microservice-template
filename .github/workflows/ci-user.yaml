@@ -71,7 +71,7 @@ jobs:
       SERVICE_NAME: dv-user
       BUCKET: ${{secrets.BUCKET}}
       THRESHOLD: ${{secrets.THRESHOLD}}
-      TOKEN: ${{secrets.GITHUB_TOKEN}}
+      TOKEN: ${{secrets.GIT_TOKEN}}
     outputs:
       totalCoverage: ${{steps.test-coverage.outputs.total}}
       isPassMinCoverage: ${{steps.test-coverage.outputs.isPassMinCoverage}}

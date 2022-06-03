@@ -71,7 +71,7 @@ jobs:
       SERVICE_NAME: dv-notification
       BUCKET: ${{secrets.BUCKET}}
       THRESHOLD: ${{secrets.THRESHOLD}}
-      TOKEN: ${{secrets.GITHUB_TOKEN}}
+      TOKEN: ${{secrets.GIT_TOKEN}}
     outputs:
       totalCoverage: ${{steps.test-coverage.outputs.total}}
       isPassMinCoverage: ${{steps.test-coverage.outputs.isPassMinCoverage}}
@@ -159,7 +159,7 @@ jobs:
         with:
           projectBaseDir: notification
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NOTIFICATION }}
       
   checker:
@@ -169,7 +169,7 @@ jobs:
     env:
       SERVICE_NAME: dv-notification
       BUCKET: ${{secrets.BUCKET}}
-      TOKEN: ${{secrets.GITHUB_TOKEN}}
+      TOKEN: ${{secrets.GIT_TOKEN}}
 
     steps:
       - name: Check out code into directory
