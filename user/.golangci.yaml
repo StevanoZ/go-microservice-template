@@ -21,3 +21,4 @@ run:
   build-tags:
     - wireinject
   tests: false
+  timeout: 5m
