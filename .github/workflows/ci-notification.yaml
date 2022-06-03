@@ -25,7 +25,7 @@ jobs:
           error: 'Your commit messages not follow the conventional commits'
           excludeDescription: 'true'
           checkAllCommitMessages: 'true'
-          accessToken: ${{ secrets.GIT_TOKEN }}
+          accessToken: ${{ secrets.GITHUB_TOKEN }}
       - name: Check Line Length
         uses: gsactions/commit-message-checker@v1
         with:
@@ -34,7 +34,7 @@ jobs:
           excludeDescription: 'true'
           excludeTitle: 'true'
           checkAllCommitMessages: 'true'
-          accessToken: ${{ secrets.GIT_TOKEN }}
+          accessToken: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
     name: Run Lint
@@ -43,6 +43,8 @@ jobs:
     steps:
       - name: Check out code into directory
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
@@ -69,7 +71,7 @@ jobs:
       SERVICE_NAME: dv-notification
       BUCKET: ${{secrets.BUCKET}}
       THRESHOLD: ${{secrets.THRESHOLD}}
-      TOKEN: ${{secrets.GIT_TOKEN}}
+      TOKEN: ${{secrets.GITHUB_TOKEN}}
     outputs:
       totalCoverage: ${{steps.test-coverage.outputs.total}}
       isPassMinCoverage: ${{steps.test-coverage.outputs.isPassMinCoverage}}
@@ -101,6 +103,8 @@ jobs:
     steps:
       - name: Check out code into directory
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
@@ -155,7 +159,7 @@ jobs:
         with:
           projectBaseDir: notification
         env:
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_NOTIFICATION }}
       
   checker:
@@ -165,11 +169,13 @@ jobs:
     env:
       SERVICE_NAME: dv-notification
       BUCKET: ${{secrets.BUCKET}}
-      TOKEN: ${{secrets.GIT_TOKEN}}
+      TOKEN: ${{secrets.GITHUB_TOKEN}}
 
     steps:
       - name: Check out code into directory
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Update status success
         if: needs.test.outputs.isPassMinCoverage == 'true'
