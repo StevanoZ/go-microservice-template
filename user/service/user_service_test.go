@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/pubsub"
 	shrd_helper "github.com/StevanoZ/dv-shared/helper"
 	message "github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
@@ -225,6 +224,14 @@ func createPaginationCountParams(searchValue string) user_db.GetUsersPaginationC
 	}
 }
 
+func unmarshalUserImages(t *testing.T, user user_db.FindUserWithImagesRow) []user_db.UserImage {
+	userImages := []user_db.UserImage{}
+	err := json.Unmarshal(user.Images, &userImages)
+	assert.NoError(t, err)
+
+	return userImages
+}
+
 func TestSignUp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -236,30 +243,32 @@ func TestSignUp(t *testing.T) {
 
 	userSvc,
 		userRepo,
-		_, pubSubClient, _ := initUserSvc(ctrl, config)
+		_, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		var userId uuid.UUID
 		otpCode := shrd_utils.RandomInt(0, 999999)
+		user := createUser()
+
 		setupAndMockTx(t, DB, userRepo)
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
 		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserParams) (user_db.User, error) {
 				assert.NotEqual(t, PASSWORD, params.Password)
 				assert.Equal(t, USERNAME, params.Username)
-				user := createUser()
+
 				userId = user.ID
 				user.OtpCode = otpCode
 
 				return user, nil
 			})
 
-		pubSubClient.EXPECT().CreateTopicIfNotExists(gomock.Any(), message.EMAIL_TOPIC).
-			Return(&pubsub.Topic{}, nil).Times(1)
-		pubSubClient.EXPECT().PublishTopics(gomock.Any(), gomock.AssignableToTypeOf([]*pubsub.Topic{}), message.OtpPayload{
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
 			Email:   EMAIL,
 			OtpCode: int(otpCode),
-		}, message.SEND_OTP_KEY).Return(nil).Times(1)
+		}).Times(1)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.CREATED_KEY, gomock.AssignableToTypeOf(message.CreatedUserPayload{})).
+			Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.SignUp(ctx, request.SignUpReq{Email: EMAIL, Username: USERNAME, Password: PASSWORD})
@@ -302,6 +311,11 @@ func TestSignUp(t *testing.T) {
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
 		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, gomock.AssignableToTypeOf(message.OtpPayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.CREATED_KEY, gomock.AssignableToTypeOf(message.CreatedUserPayload{})).
+			Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when creating user", UNPROCESSABLE_ENTITY),
@@ -433,7 +447,7 @@ func TestVerifyOtp(t *testing.T) {
 	defer DB.Close()
 
 	ctx := context.Background()
-	userSvc, userRepo, _, _, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
@@ -457,6 +471,17 @@ func TestVerifyOtp(t *testing.T) {
 			user.OtpCode = params.OtpCode
 			user.AttemptLeft = params.AttemptLeft
 			return user, nil
+		}).Times(1)
+
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY, message.UpdatedUserPayload{
+			ID:          user.ID,
+			Password:    user.Password,
+			OtpCode:     0,
+			AttemptLeft: 0,
+			Username:    user.Username,
+			Status:      "active",
+			PhoneNumber: user.PhoneNumber,
+			UpdatedAt:   user.UpdatedAt,
 		}).Times(1)
 
 		assert.NotPanics(t, func() {
@@ -608,6 +633,10 @@ func TestVerifyOtp(t *testing.T) {
 			AttemptLeft: 0,
 			OtpCode:     0,
 		}).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY, gomock.AssignableToTypeOf(message.UpdatedUserPayload{})).Times(0)
+
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when updating user", UNPROCESSABLE_ENTITY),
 			StatusCode: 422,
@@ -625,7 +654,7 @@ func TestResendOtp(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, _, pubSubClient, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
@@ -641,15 +670,13 @@ func TestResendOtp(t *testing.T) {
 				user.OtpCode = newOtpCode
 				user.AttemptLeft = params.AttemptLeft
 
-				pubSubClient.EXPECT().CreateTopicIfNotExists(gomock.Any(), message.EMAIL_TOPIC).
-					Return(&pubsub.Topic{}, nil).Times(1)
-				pubSubClient.EXPECT().PublishTopics(gomock.Any(), gomock.AssignableToTypeOf([]*pubsub.Topic{}), message.OtpPayload{
-					Email:   EMAIL,
-					OtpCode: int(newOtpCode),
-				}, message.SEND_OTP_KEY).Return(nil).Times(1)
-
 				return user, nil
 			}).Times(1)
+
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY,
+			gomock.AssignableToTypeOf(message.OtpPayload{})).Times(1)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserPayload{})).Times(1)
 
 		assert.NotPanics(t, func() {
 			userSvc.ResendOtp(ctx, request.ResendOtpReq{Email: EMAIL})
@@ -717,6 +744,12 @@ func TestResendOtp(t *testing.T) {
 				return user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)
 			}).Times(1)
 
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY,
+			gomock.AssignableToTypeOf(message.OtpPayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserPayload{})).Times(0)
+
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when updating user", UNPROCESSABLE_ENTITY),
 			StatusCode: 422,
@@ -734,7 +767,7 @@ func TestUpdateUser(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, _, _, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
@@ -759,6 +792,19 @@ func TestUpdateUser(t *testing.T) {
 
 				return user, nil
 			})
+
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			message.UpdatedUserPayload{
+				ID:          user.ID,
+				Username:    input.Username,
+				Password:    user.Password,
+				OtpCode:     user.OtpCode,
+				AttemptLeft: user.AttemptLeft,
+				Status:      user.Status,
+				PhoneNumber: input.PhoneNumber,
+				UpdatedAt:   user.UpdatedAt,
+			}).Times(1)
+
 		assert.NotPanics(t, func() {
 			resp := userSvc.UpdateUser(ctx, userId, input)
 
@@ -805,6 +851,11 @@ func TestUpdateUser(t *testing.T) {
 			Password:    user.Password,
 			Status:      user.Status,
 		}).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserPayload{})).Times(0)
+
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when updating user", UNPROCESSABLE_ENTITY),
 			StatusCode: 422,
@@ -822,7 +873,7 @@ func TestUploadImages(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, fileSvc, _, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, fileSvc, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Request Success and SET user main image", func(t *testing.T) {
 		userId := USER_ID
@@ -849,7 +900,21 @@ func TestUploadImages(t *testing.T) {
 					ImagePath: fmt.Sprintf("users/%s/%s.png", userId, IMAGE_NAME),
 				}
 				return userImage, nil
-			}).Times(3)
+			}).Times(2)
+
+		mainImageId := uuid.New()
+		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+			DoAndReturn(func(_ interface{}, params user_db.CreateUserImageParams) (user_db.UserImage, error) {
+				assert.Equal(t, userId, params.UserID)
+				assert.Equal(t, buildUploadUrl(IMAGE_NAME), params.ImageUrl)
+				assert.Contains(t, params.ImagePath, fmt.Sprintf("users/%s", userId))
+				userImage := user_db.UserImage{
+					ID:        mainImageId,
+					ImageUrl:  buildUploadUrl(IMAGE_NAME),
+					ImagePath: fmt.Sprintf("users/%s/%s.png", userId, IMAGE_NAME),
+				}
+				return userImage, nil
+			}).Times(1)
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
@@ -857,15 +922,15 @@ func TestUploadImages(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
 		userImages, firstImageId := createUserWithImages(userId, false)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).Return(
-			userImages, nil,
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(
+			unmarshalUserImages(t, userImages), nil,
 		).Times(1)
 
 		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 			ID:     firstImageId,
 			IsMain: true,
 		}).
-			Return(user_db.UserImage{}, nil).Times(1)
+			Return(user_db.UserImage{ID: mainImageId}, nil).Times(1)
 
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).
 			DoAndReturn(func(_ interface{}, params user_db.UpdateUserMainImageParams) (user_db.User, error) {
@@ -874,6 +939,11 @@ func TestUploadImages(t *testing.T) {
 				assert.Contains(t, params.MainImagePath, fmt.Sprintf("users/%s", userId))
 				return user_db.User{}, nil
 			}).Times(1)
+
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY,
+			gomock.AssignableToTypeOf([]message.CreatedUserImagePayload{})).Times(1)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.UploadImages(ctx, filesHeader, userId)
@@ -915,13 +985,19 @@ func TestUploadImages(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
 		userImages, _ := createUserWithImages(userId, true)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).Return(
-			userImages, nil,
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(
+			unmarshalUserImages(t, userImages), nil,
 		).Times(1)
 
 		// SHOULD NOT CALL THIS BECAUSE MAIN IMAGE ALREADY SET
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+
+		// BUT SHOULD CALL THIS GO ROUTINE
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY,
+			gomock.AssignableToTypeOf([]message.CreatedUserImagePayload{})).Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.UploadImages(ctx, filesHeader, userId)
@@ -1006,9 +1082,13 @@ func TestUploadImages(t *testing.T) {
 		assert.NoError(t, err)
 		userRepo.EXPECT().GetDB().Return(DB).Times(0)
 		userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(tx)).Return(userRepo).Times(0)
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).Times(0)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Times(0)
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY,
+			gomock.AssignableToTypeOf([]message.CreatedUserImagePayload{})).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when uploading file", UNPROCESSABLE_ENTITY),
@@ -1018,7 +1098,7 @@ func TestUploadImages(t *testing.T) {
 		})
 	})
 
-	t.Run("Go Routine failed when get user with images", func(t *testing.T) {
+	t.Run("Go Routine failed when get user images with userId", func(t *testing.T) {
 		userId := USER_ID
 		setupAndMockTx(t, DB, userRepo)
 
@@ -1030,10 +1110,16 @@ func TestUploadImages(t *testing.T) {
 			Return(user_db.UserImage{}, nil).Times(3)
 
 		setupAndMockTx(t, DB, userRepo)
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).Return(user_db.FindUserWithImagesRow{}, errors.New(UNPROCESSABLE_ENTITY)).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return([]user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).
 			Times(1)
+
+		// SHOULD NOT CALL THIS
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY,
+			gomock.AssignableToTypeOf([]message.CreatedUserImagePayload{})).Times(0)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.UploadImages(ctx, filesHeader, userId)
@@ -1056,12 +1142,18 @@ func TestUploadImages(t *testing.T) {
 		setupAndMockTx(t, DB, userRepo)
 		userImages, _ := createUserWithImages(userId, false)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).Return(userImages, nil).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(unmarshalUserImages(t, userImages), nil).
 			Times(1)
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).
-			Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).MinTimes(1)
+			Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).
 			Return(user_db.User{}, nil).MinTimes(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY,
+			gomock.AssignableToTypeOf([]message.CreatedUserImagePayload{})).Times(0)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.UploadImages(ctx, filesHeader, userId)
@@ -1079,7 +1171,11 @@ func TestSetMainImage(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, _, _, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
+	userImages, _ := createUserWithImages(USER_ID, true)
+	images := []user_db.UserImage{}
+	err := json.Unmarshal(userImages.Images, &images)
+	assert.NoError(t, err)
 
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
@@ -1091,8 +1187,8 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[2]
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(userImages, nil).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return(images, nil).Times(1)
 
 		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 			ID:     newMainImage.ID,
@@ -1114,6 +1210,11 @@ func TestSetMainImage(t *testing.T) {
 			MainImagePath: newMainImage.ImagePath,
 		}).Return(user_db.User{}, nil).Times(1)
 
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(1)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserImagePayload{})).Times(1)
+
 		assert.NotPanics(t, func() {
 			resp := userSvc.SetMainImage(ctx, userId, newMainImage.ID)
 			assert.Equal(t, newMainImage.ID, resp.ID)
@@ -1125,8 +1226,8 @@ func TestSetMainImage(t *testing.T) {
 		userId := USER_ID
 		setupAndMockTx(t, DB, userRepo)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(user_db.FindUserWithImagesRow{}, errors.New(NOT_FOUND)).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return([]user_db.UserImage{}, errors.New(NOT_FOUND)).Times(1)
 
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
@@ -1142,10 +1243,11 @@ func TestSetMainImage(t *testing.T) {
 		userId := USER_ID
 		setupAndMockTx(t, DB, userRepo)
 
-		userImages, mainImageId := createUserWithImages(userId, true)
+		_, mainImageId := createUserWithImages(userId, true)
+		images[0].ID = mainImageId
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(userImages, nil).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return(images, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|you can't set the same main image",
@@ -1159,10 +1261,8 @@ func TestSetMainImage(t *testing.T) {
 		userId := USER_ID
 		setupAndMockTx(t, DB, userRepo)
 
-		userImages, _ := createUserWithImages(userId, true)
-
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(userImages, nil).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return(images, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|image not found",
@@ -1183,8 +1283,8 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[1]
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(userImages, nil).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return(images, nil).Times(1)
 
 		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 			ID:     oldMainImageId,
@@ -1199,6 +1299,12 @@ func TestSetMainImage(t *testing.T) {
 			MainImageUrl:  newMainImage.ImageUrl,
 			MainImagePath: newMainImage.ImagePath,
 		}).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserImagePayload{})).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when set the main image", UNPROCESSABLE_ENTITY),
@@ -1219,8 +1325,8 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[1]
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
-			Return(userImages, nil).Times(1)
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+			Return(images, nil).Times(1)
 
 		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 			ID:     oldMainImageId,
@@ -1235,6 +1341,12 @@ func TestSetMainImage(t *testing.T) {
 			MainImageUrl:  newMainImage.ImageUrl,
 			MainImagePath: newMainImage.ImagePath,
 		}).Return(user_db.User{}, nil).Times(0)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserMainImagePayload{})).Times(0)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserImagePayload{})).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when set the main image", UNPROCESSABLE_ENTITY),
@@ -1253,7 +1365,7 @@ func TestDeleteImage(t *testing.T) {
 	config, DB := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
-	userSvc, userRepo, fileSvc, _, _ := initUserSvc(ctrl, config)
+	userSvc, userRepo, fileSvc, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
@@ -1272,6 +1384,9 @@ func TestDeleteImage(t *testing.T) {
 			Return(nil).Times(1)
 
 		userRepo.EXPECT().DeleteUserImage(ctx, imageId).Return(nil).Times(1)
+
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.DELETED_KEY,
+			message.DeletedUserImagePayload{ID: imageId}).Times(1)
 
 		assert.NotPanics(t, func() {
 			userSvc.DeleteImage(ctx, userId, imageId)
@@ -1366,6 +1481,10 @@ func TestDeleteImage(t *testing.T) {
 			Return(errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
 		userRepo.EXPECT().DeleteUserImage(ctx, imageId).Return(nil).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.DELETED_KEY,
+			message.DeletedUserImagePayload{ID: imageId}).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when deleting image", UNPROCESSABLE_ENTITY),

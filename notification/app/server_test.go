@@ -45,14 +45,16 @@ func TestStartServer(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestListenEvent(t *testing.T) {
+func TestListenForEvent(t *testing.T) {
 	ctx := context.Background()
 	ctr := gomock.NewController(t)
 	server, notificationSvc := initServer(ctr)
 
 	ctxCancel, cancel := context.WithCancel(ctx)
-	notificationSvc.EXPECT().ListenAndSendEmail(ctxCancel).Times(1)
+	notificationSvc.EXPECT().ListenForEmailTopic(ctxCancel).Times(1)
+	notificationSvc.EXPECT().ListenForUserTopic(ctxCancel).Times(1)
+	notificationSvc.EXPECT().ListenForUserImageTopic(ctxCancel).Times(1)
 	server.ListenEvent(ctxCancel)
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(700 * time.Millisecond)
 	cancel()
 }

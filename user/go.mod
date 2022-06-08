@@ -96,7 +96,7 @@ require (
 
 require (
 	cloud.google.com/go/pubsub v1.21.1
-	github.com/StevanoZ/dv-shared v1.4.1
+	github.com/StevanoZ/dv-shared v1.5.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.7
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-openapi/runtime v0.24.1

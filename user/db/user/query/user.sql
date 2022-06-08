@@ -9,7 +9,7 @@ attempt_left = $4, otp_code = $5, status = $6,
 updated_at = now() WHERE id = $7 RETURNING *;
 
 -- name: UpdateUserMainImage :one
-UPDATE "user" SET main_image_url = $1, main_image_path = $2 
+UPDATE "user" SET main_image_url = $1, main_image_path = $2, updated_at = now()
 WHERE id = $3 RETURNING *;
 
 -- name: DeleteUser :exec
@@ -77,3 +77,6 @@ SELECT * FROM "user_image" WHERE user_id = $1;
 SELECT u.*, array_to_json(array_agg(row_to_json(ui.*))) as images FROM "user" as u LEFT JOIN "user_image" as ui 
 ON ui.user_id = u.id WHERE u.id = $1
 GROUP BY u.id; 
+
+-- name: FindUserImagesByUserIdForUpdate :many
+SELECT * FROM "user_image" WHERE user_id = $1 FOR NO KEY UPDATE;

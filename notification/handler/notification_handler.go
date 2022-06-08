@@ -12,7 +12,9 @@ import (
 
 type NotificationHandler interface {
 	Ping(w http.ResponseWriter, r *http.Request)
-	ListenEvent(ctx context.Context) error
+	ListenForEmailTopic(ctx context.Context) error
+	ListenForUserTopic(ctx context.Context) error
+	ListenForUserImageTopic(ctx context.Context) error
 	SetupUserRoutes(route *chi.Mux)
 }
 
@@ -46,6 +48,14 @@ func (h *NotificationHandlerImpl) SetupUserRoutes(route *chi.Mux) {
 	})
 }
 
-func (h *NotificationHandlerImpl) ListenEvent(ctx context.Context) error {
-	return h.notificationSvc.ListenAndSendEmail(ctx)
+func (h *NotificationHandlerImpl) ListenForEmailTopic(ctx context.Context) error {
+	return h.notificationSvc.ListenForEmailTopic(ctx)
+}
+
+func (h *NotificationHandlerImpl) ListenForUserTopic(ctx context.Context) error {
+	return h.notificationSvc.ListenForUserTopic(ctx)
+}
+
+func (h *NotificationHandlerImpl) ListenForUserImageTopic(ctx context.Context) error {
+	return h.notificationSvc.ListenForUserImageTopic(ctx)
 }

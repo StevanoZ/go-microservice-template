@@ -155,6 +155,21 @@ func (mr *MockUserRepoMockRecorder) FindUserImagesByUserId(ctx, userID interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindUserImagesByUserId", reflect.TypeOf((*MockUserRepo)(nil).FindUserImagesByUserId), ctx, userID)
 }
 
+// FindUserImagesByUserIdForUpdate mocks base method.
+func (m *MockUserRepo) FindUserImagesByUserIdForUpdate(ctx context.Context, userID uuid.UUID) ([]user_db.UserImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindUserImagesByUserIdForUpdate", ctx, userID)
+	ret0, _ := ret[0].([]user_db.UserImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindUserImagesByUserIdForUpdate indicates an expected call of FindUserImagesByUserIdForUpdate.
+func (mr *MockUserRepoMockRecorder) FindUserImagesByUserIdForUpdate(ctx, userID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindUserImagesByUserIdForUpdate", reflect.TypeOf((*MockUserRepo)(nil).FindUserImagesByUserIdForUpdate), ctx, userID)
+}
+
 // FindUserWithImages mocks base method.
 func (m *MockUserRepo) FindUserWithImages(ctx context.Context, id uuid.UUID) (user_db.FindUserWithImagesRow, error) {
 	m.ctrl.T.Helper()

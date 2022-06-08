@@ -207,6 +207,41 @@ func (q *Queries) FindUserImagesByUserId(ctx context.Context, userID uuid.UUID) 
 	return items, nil
 }
 
+const findUserImagesByUserIdForUpdate = `-- name: FindUserImagesByUserIdForUpdate :many
+SELECT id, image_url, is_main, user_id, created_at, updated_at, image_path FROM "user_image" WHERE user_id = $1 FOR NO KEY UPDATE
+`
+
+func (q *Queries) FindUserImagesByUserIdForUpdate(ctx context.Context, userID uuid.UUID) ([]UserImage, error) {
+	rows, err := q.db.QueryContext(ctx, findUserImagesByUserIdForUpdate, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserImage{}
+	for rows.Next() {
+		var i UserImage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ImageUrl,
+			&i.IsMain,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ImagePath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findUserWithImages = `-- name: FindUserWithImages :one
 SELECT u.id, u.email, u.username, u.password, u.attempt_left, u.otp_code, u.phone_number, u.status, u.main_image_url, u.created_at, u.updated_at, u.main_image_path, array_to_json(array_agg(row_to_json(ui.*))) as images FROM "user" as u LEFT JOIN "user_image" as ui 
 ON ui.user_id = u.id WHERE u.id = $1
@@ -421,7 +456,7 @@ func (q *Queries) UpdateUserImage(ctx context.Context, arg UpdateUserImageParams
 }
 
 const updateUserMainImage = `-- name: UpdateUserMainImage :one
-UPDATE "user" SET main_image_url = $1, main_image_path = $2 
+UPDATE "user" SET main_image_url = $1, main_image_path = $2, updated_at = now()
 WHERE id = $3 RETURNING id, email, username, password, attempt_left, otp_code, phone_number, status, main_image_url, created_at, updated_at, main_image_path
 `
 
