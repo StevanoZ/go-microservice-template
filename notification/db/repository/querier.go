@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.13.0
 
-package user_db
+package querier
 
 import (
 	"context"
@@ -11,18 +11,16 @@ import (
 )
 
 type Querier interface {
+	CreateErrorMessage(ctx context.Context, arg CreateErrorMessageParams) (ErrorMessage, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserImage(ctx context.Context, arg CreateUserImageParams) (UserImage, error)
+	DeleteErrorMessage(ctx context.Context, id int64) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserImage(ctx context.Context, id uuid.UUID) error
-	FindUserByEmail(ctx context.Context, email string) (User, error)
-	FindUserById(ctx context.Context, id uuid.UUID) (User, error)
-	FindUserImageById(ctx context.Context, id uuid.UUID) (UserImage, error)
-	FindUserImagesByUserId(ctx context.Context, userID uuid.UUID) ([]UserImage, error)
-	FindUserImagesByUserIdForUpdate(ctx context.Context, userID uuid.UUID) ([]UserImage, error)
-	FindUserWithImages(ctx context.Context, id uuid.UUID) (FindUserWithImagesRow, error)
-	FindUsers(ctx context.Context, arg FindUsersParams) ([]User, error)
-	GetUsersPaginationCount(ctx context.Context, arg GetUsersPaginationCountParams) (int64, error)
+	FindErrorMessage(ctx context.Context, arg FindErrorMessageParams) ([]ErrorMessage, error)
+	FindUserByIdForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	FindUserImageByIdForUpdate(ctx context.Context, id uuid.UUID) (UserImage, error)
+	FindUserMainImageByUserIdForUpdate(ctx context.Context, userID uuid.UUID) (UserImage, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserImage(ctx context.Context, arg UpdateUserImageParams) (UserImage, error)
 	UpdateUserMainImage(ctx context.Context, arg UpdateUserMainImageParams) (User, error)

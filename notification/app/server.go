@@ -37,7 +37,7 @@ func NewServer(route *chi.Mux,
 }
 
 func (s *ServerImpl) Start() {
-	s.route.Use(shrd_middleware.Recovery)
+	shrd_middleware.SetupMiddleware(s.route, s.config)
 	s.notificationHandler.SetupUserRoutes(s.route)
 
 	fmt.Println("server started")
@@ -55,7 +55,15 @@ func (s *ServerImpl) Start() {
 
 func (s *ServerImpl) ListenEvent(ctx context.Context) {
 	go func() {
-		err := s.notificationHandler.ListenEvent(ctx)
+		err := s.notificationHandler.ListenForUserTopic(ctx)
+		shrd_utils.LogIfError(err)
+	}()
+	go func() {
+		err := s.notificationHandler.ListenForEmailTopic(ctx)
+		shrd_utils.LogIfError(err)
+	}()
+	go func() {
+		err := s.notificationHandler.ListenForUserImageTopic(ctx)
 		shrd_utils.LogIfError(err)
 	}()
 }

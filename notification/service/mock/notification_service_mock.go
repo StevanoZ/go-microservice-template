@@ -34,16 +34,44 @@ func (m *MockNotificationSvc) EXPECT() *MockNotificationSvcMockRecorder {
 	return m.recorder
 }
 
-// ListenAndSendEmail mocks base method.
-func (m *MockNotificationSvc) ListenAndSendEmail(ctx context.Context) error {
+// ListenForEmailTopic mocks base method.
+func (m *MockNotificationSvc) ListenForEmailTopic(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListenAndSendEmail", ctx)
+	ret := m.ctrl.Call(m, "ListenForEmailTopic", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ListenAndSendEmail indicates an expected call of ListenAndSendEmail.
-func (mr *MockNotificationSvcMockRecorder) ListenAndSendEmail(ctx interface{}) *gomock.Call {
+// ListenForEmailTopic indicates an expected call of ListenForEmailTopic.
+func (mr *MockNotificationSvcMockRecorder) ListenForEmailTopic(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenAndSendEmail", reflect.TypeOf((*MockNotificationSvc)(nil).ListenAndSendEmail), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForEmailTopic", reflect.TypeOf((*MockNotificationSvc)(nil).ListenForEmailTopic), ctx)
+}
+
+// ListenForUserImageTopic mocks base method.
+func (m *MockNotificationSvc) ListenForUserImageTopic(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListenForUserImageTopic", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ListenForUserImageTopic indicates an expected call of ListenForUserImageTopic.
+func (mr *MockNotificationSvcMockRecorder) ListenForUserImageTopic(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForUserImageTopic", reflect.TypeOf((*MockNotificationSvc)(nil).ListenForUserImageTopic), ctx)
+}
+
+// ListenForUserTopic mocks base method.
+func (m *MockNotificationSvc) ListenForUserTopic(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListenForUserTopic", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ListenForUserTopic indicates an expected call of ListenForUserTopic.
+func (mr *MockNotificationSvcMockRecorder) ListenForUserTopic(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForUserTopic", reflect.TypeOf((*MockNotificationSvc)(nil).ListenForUserTopic), ctx)
 }

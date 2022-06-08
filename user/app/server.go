@@ -36,7 +36,7 @@ func NewServer(
 }
 
 func (s *ServerImpl) Start() {
-	s.route.Use(shrd_middleware.Recovery)
+	shrd_middleware.SetupMiddleware(s.route, s.config)
 	s.userHandler.SetupUserRoutes(s.route)
 
 	fmt.Println("server started")

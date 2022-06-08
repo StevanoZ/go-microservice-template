@@ -4,8 +4,11 @@
 package main
 
 import (
+	"database/sql"
+
 	"cloud.google.com/go/pubsub"
 	"github.com/StevanoZ/dv-notification/app"
+	querier "github.com/StevanoZ/dv-notification/db/repository"
 	"github.com/StevanoZ/dv-notification/handler"
 	"github.com/StevanoZ/dv-notification/service"
 	pubsub_client "github.com/StevanoZ/dv-shared/pubsub"
@@ -37,11 +40,16 @@ var emailSet = wire.NewSet(
 )
 
 var notificationSet = wire.NewSet(
+	querier.NewRepository,
 	service.NewNotificationSvc,
 	handler.NewNotificationHandler,
 )
 
-func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (
+func InitializedApp(
+	r *chi.Mux, 
+	DB *sql.DB,
+	config *shrd_utils.BaseConfig,
+	) (
 	app.Server,
 	error,
 ) {

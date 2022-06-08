@@ -2,7 +2,7 @@ POSTGRESQL_URL='postgresql://postgres:postgres_password@localhost:5353/dv_notifi
 POSTGRESQL_URL_TEST='postgresql://postgres:postgres_password@localhost:5353/dv_notification_test?sslmode=disable'
 
 migrateInit:
-	migrate create -ext sql -dir db/migration -seq alter_user
+	migrate create -ext sql -dir db/migration -seq error_message_schema
 
 createDb:
 	docker exec -it postgres_2 createdb -U postgres dv_notification
@@ -35,7 +35,7 @@ mockSvc:
 	mockgen -package mock_svc -destination service/mock/notification_service_mock.go -source=service/notification_service.go
 
 mockRepo:
-	mockgen -package mock_user_repo -destination db/user/sqlc/mock/user_repository_mock.go -source=db/user/sqlc/user_repository.go
+	mockgen -package mock_querier -destination db/repository/mock/repository_mock.go -source=db/repository/repository.go -aux_files github.com/StevanoZ/dv-notification/db/repository=db/repository/querier.go
 
 test:
 	go test -v -covermode=atomic -race -coverpkg=./... ./... \

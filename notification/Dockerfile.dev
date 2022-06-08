@@ -14,3 +14,5 @@ RUN apk --no-cache add curl
 RUN curl -sSfL https://raw.githubusercontent.com/cosmtrek/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
 EXPOSE 8181
+
+CMD [ "air" ]

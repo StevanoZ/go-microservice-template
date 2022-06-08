@@ -3,15 +3,14 @@ package service
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
-	"cloud.google.com/go/pubsub"
 	"github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_token "github.com/StevanoZ/dv-shared/token"
@@ -54,7 +53,7 @@ type UserSvc interface {
 type UserSvcImpl struct {
 	userRepo     user_db.UserRepo
 	fileSvc      shrd_service.FileSvc
-	pubSubClient shrd_service.PubSubClient
+	pubsubClient shrd_service.PubSubClient
 	cacheSvc     shrd_service.CacheSvc
 	tokenMaker   shrd_token.Maker
 	config       *shrd_utils.BaseConfig
@@ -63,7 +62,7 @@ type UserSvcImpl struct {
 func NewUserSvc(
 	userRepo user_db.UserRepo,
 	fileSvc shrd_service.FileSvc,
-	pubSubClient shrd_service.PubSubClient,
+	pubsubClient shrd_service.PubSubClient,
 	cacheSvc shrd_service.CacheSvc,
 	token shrd_token.Maker,
 	config *shrd_utils.BaseConfig,
@@ -71,7 +70,7 @@ func NewUserSvc(
 	return &UserSvcImpl{
 		userRepo:     userRepo,
 		fileSvc:      fileSvc,
-		pubSubClient: pubSubClient,
+		pubsubClient: pubsubClient,
 		cacheSvc:     cacheSvc,
 		config:       config,
 		tokenMaker:   token,
@@ -111,13 +110,23 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 
 		go func() {
 			ctx := context.Background()
-			topic, err := s.pubSubClient.CreateTopicIfNotExists(ctx, message.EMAIL_TOPIC)
-			shrd_utils.LogIfError(err)
-			err = s.pubSubClient.PublishTopics(ctx, []*pubsub.Topic{topic}, message.OtpPayload{
+			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
 				Email:   user.Email,
 				OtpCode: int(user.OtpCode),
-			}, message.SEND_OTP_KEY)
-			shrd_utils.LogIfError(err)
+			})
+		}()
+
+		go func() {
+			ctx := context.Background()
+			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.CREATED_KEY, message.CreatedUserPayload{
+				ID:        user.ID,
+				Email:     user.Email,
+				Username:  user.Username,
+				Password:  user.Password,
+				OtpCode:   user.OtpCode,
+				CreatedAt: user.CreatedAt,
+				UpdatedAt: user.UpdatedAt,
+			})
 		}()
 
 		go func() {
@@ -194,6 +203,7 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 
 func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input request.UpdateUserReq) response.UserResp {
 	userResp := response.UserResp{}
+	updatedUser := user_db.User{}
 
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
@@ -218,11 +228,26 @@ func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input re
 		}
 
 		userResp = mapping.ToUserResp(user)
+		updatedUser = user
+
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
 
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY, message.UpdatedUserPayload{
+			ID:          updatedUser.ID,
+			Username:    updatedUser.Username,
+			Password:    updatedUser.Password,
+			OtpCode:     updatedUser.OtpCode,
+			AttemptLeft: updatedUser.AttemptLeft,
+			PhoneNumber: updatedUser.PhoneNumber,
+			Status:      updatedUser.Status,
+			UpdatedAt:   updatedUser.UpdatedAt,
+		})
+	}()
 	go func() {
 		ctx := context.Background()
 		s.cacheSvc.DelByPrefix(ctx, shrd_utils.BuildPrefixKey(utils.USER_KEY, userId.String()))
@@ -257,6 +282,8 @@ func verifyOtpHelper(user user_db.User, input request.VerifyOtpReq) (int, error)
 
 func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq) response.UserWithTokenResp {
 	userWithTokenResp := response.UserWithTokenResp{}
+	updatedUser := user_db.User{}
+
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
@@ -301,11 +328,26 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when creating token", 422)
 		}
+		updatedUser = user
 		userWithTokenResp.Token = token
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY, message.UpdatedUserPayload{
+			ID:          updatedUser.ID,
+			Username:    updatedUser.Username,
+			Password:    updatedUser.Password,
+			PhoneNumber: updatedUser.PhoneNumber,
+			OtpCode:     updatedUser.OtpCode,
+			AttemptLeft: updatedUser.AttemptLeft,
+			Status:      updatedUser.Status,
+			UpdatedAt:   updatedUser.UpdatedAt,
+		})
+	}()
 
 	go func() {
 		ctx := context.Background()
@@ -316,6 +358,8 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 }
 
 func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq) {
+	var updatedUser user_db.User
+
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
@@ -347,23 +391,33 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 		}
-
-		go func() {
-			ctx := context.Background()
-			topic, err := s.pubSubClient.CreateTopicIfNotExists(ctx, message.EMAIL_TOPIC)
-			shrd_utils.LogIfError(err)
-
-			err = s.pubSubClient.PublishTopics(ctx, []*pubsub.Topic{topic}, message.OtpPayload{
-				Email:   user.Email,
-				OtpCode: int(user.OtpCode),
-			}, message.SEND_OTP_KEY)
-			shrd_utils.LogIfError(err)
-		}()
-
+		updatedUser = user
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+			Email:   updatedUser.Email,
+			OtpCode: int(updatedUser.OtpCode),
+		})
+	}()
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY, message.UpdatedUserPayload{
+			ID:          updatedUser.ID,
+			Username:    updatedUser.Username,
+			Password:    updatedUser.Password,
+			PhoneNumber: updatedUser.PhoneNumber,
+			OtpCode:     updatedUser.OtpCode,
+			AttemptLeft: updatedUser.AttemptLeft,
+			Status:      updatedUser.Status,
+			UpdatedAt:   updatedUser.UpdatedAt,
+		})
+	}()
 }
 
 func uploadImagesHelper(
@@ -400,24 +454,75 @@ func uploadImagesHelper(
 	return image, err
 }
 
-func checkAndSetUserMainImage(userRepo user_db.UserRepo, userId uuid.UUID) {
+func checkAndSendCreatedUserImagesEvent(
+	pubsubClient shrd_service.PubSubClient,
+	images []user_db.UserImage,
+	updatedUserImage user_db.UserImage,
+	hasMainImage bool,
+) {
+	ctx := context.Background()
+	createdUserImagesPayload := make([]message.CreatedUserImagePayload, len(images))
+
+	if !hasMainImage {
+		isMain := false
+		for i, img := range images {
+			isMain = img.ID == updatedUserImage.ID
+
+			createdUserImagesPayload[i] = message.CreatedUserImagePayload{
+				ID:        img.ID,
+				UserID:    img.UserID,
+				ImageUrl:  img.ImageUrl,
+				ImagePath: img.ImagePath,
+				IsMain:    isMain,
+				CreatedAt: img.CreatedAt,
+				UpdatedAt: img.UpdatedAt,
+			}
+		}
+		pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY, createdUserImagesPayload)
+	} else {
+		for i, img := range images {
+			createdUserImagesPayload[i] = message.CreatedUserImagePayload{
+				ID:        img.ID,
+				UserID:    img.UserID,
+				ImageUrl:  img.ImageUrl,
+				ImagePath: img.ImagePath,
+				IsMain:    img.IsMain,
+				CreatedAt: img.CreatedAt,
+				UpdatedAt: img.UpdatedAt,
+			}
+		}
+		pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.CREATED_KEY, createdUserImagesPayload)
+	}
+}
+
+func checkAndSendUpdatedUserMainImageEvent(pubsubClient shrd_service.PubSubClient, updatedUser user_db.User, hasMainImage bool) {
+	ctx := context.Background()
+	if !hasMainImage {
+		pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY, message.UpdatedUserMainImagePayload{
+			ID:            updatedUser.ID,
+			MainImageUrl:  updatedUser.MainImageUrl,
+			MainImagePath: updatedUser.MainImagePath,
+			UpdatedAt:     updatedUser.UpdatedAt,
+		})
+	}
+}
+
+func checkAndSetUserMainImage(userRepo user_db.UserRepo, pubsubClient shrd_service.PubSubClient, images []user_db.UserImage, userId uuid.UUID) {
 	ctx := context.Background()
 	ewg := errgroup.Group{}
+	var updatedUser user_db.User
+	var updatedUserImage user_db.UserImage
+	hasMainImage := false
+	var err1 error
+	var err2 error
+
 	err := shrd_utils.ExecTx(ctx, userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := userRepo.WithTx(tx)
-		user, err := uTx.FindUserWithImages(ctx, userId)
+		userImages, err := uTx.FindUserImagesByUserIdForUpdate(ctx, userId)
 		if err != nil {
 			return err
 		}
 
-		userImages := []user_db.UserImage{}
-
-		err = json.Unmarshal(user.Images, &userImages)
-		if err != nil {
-			return err
-		}
-
-		hasMainImage := false
 		mainImageUrl := ""
 		mainImagePath := ""
 
@@ -435,34 +540,44 @@ func checkAndSetUserMainImage(userRepo user_db.UserRepo, userId uuid.UUID) {
 				ID:     userImages[0].ID,
 				IsMain: true,
 			}
-			ewg.Go(func() error {
-				_, err := uTx.UpdateUserImage(ctx, params)
-				return err
-			})
+
 			ewg.Go(func() error {
 				params := user_db.UpdateUserMainImageParams{
-					ID:            user.ID,
+					ID:            userId,
 					MainImageUrl:  mainImageUrl,
 					MainImagePath: mainImagePath,
 				}
-
-				_, err := uTx.UpdateUserMainImage(ctx, params)
-				return err
+				updatedUser, err1 = uTx.UpdateUserMainImage(ctx, params)
+				return err1
 			})
 
+			ewg.Go(func() error {
+				updatedUserImage, err2 = uTx.UpdateUserImage(ctx, params)
+				return err2
+			})
 		}
+
 		if err := ewg.Wait(); err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUploadingFile, 422)
 		} else if mainImageUrl != "" {
-			fmt.Println("success set main image", mainImageUrl)
+			log.Println("success set user main image", mainImageUrl)
+			updatedUser.MainImagePath = mainImagePath
+			updatedUser.MainImageUrl = mainImageUrl
 		}
 		return nil
 	})
+
 	shrd_utils.LogIfError(err)
+
+	if err == nil {
+		go checkAndSendUpdatedUserMainImageEvent(pubsubClient, updatedUser, hasMainImage)
+		go checkAndSendCreatedUserImagesEvent(pubsubClient, images, updatedUserImage, hasMainImage)
+	}
 }
 
 func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileHeader, userId uuid.UUID) []response.UserImageResp {
 	userImagesResp := make([]response.UserImageResp, len(files))
+	images := make([]user_db.UserImage, len(files))
 
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
@@ -497,6 +612,7 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 				}
 
 				userImagesResp[index] = mapping.ToUserImageResp(image)
+				images[index] = image
 
 				return nil
 			})
@@ -511,7 +627,7 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 	shrd_utils.PanicIfError(err)
 
 	go func() {
-		checkAndSetUserMainImage(s.userRepo, userId)
+		checkAndSetUserMainImage(s.userRepo, s.pubsubClient, images, userId)
 	}()
 
 	go func() {
@@ -586,13 +702,13 @@ func setMainImageHelper(
 	imageId uuid.UUID,
 	newMainImageUrl string,
 	newMainImagePath string,
-) error {
+) (user_db.User, user_db.UserImage, error) {
 	image, err := uTx.UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 		ID:     imageId,
 		IsMain: true,
 	})
 	if err != nil {
-		return err
+		return user_db.User{}, user_db.UserImage{}, err
 	}
 
 	*userImageResp = mapping.ToUserImageResp(image)
@@ -603,28 +719,24 @@ func setMainImageHelper(
 		MainImagePath: newMainImagePath,
 	}
 
-	_, err = uTx.UpdateUserMainImage(ctx, userParams)
-	return err
+	user, err := uTx.UpdateUserMainImage(ctx, userParams)
+	return user, image, err
 }
 
 func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageId uuid.UUID) response.UserImageResp {
 	userImageResp := response.UserImageResp{}
+	var updatedUser user_db.User
+	var updatedUserImage user_db.UserImage
+	var err1 error
 
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
 		ewg := errgroup.Group{}
-		user, err := uTx.FindUserWithImages(ctx, userId)
+		userImages, err := uTx.FindUserImagesByUserIdForUpdate(ctx, userId)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
-		}
-
-		userImages := []user_db.UserImage{}
-
-		err = json.Unmarshal(user.Images, &userImages)
-		if err != nil {
-			return shrd_utils.CustomErrorWithTrace(err, "failed when unmarshal", 404)
 		}
 
 		var newMainImageUrl string
@@ -649,7 +761,7 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 		}
 
 		ewg.Go(func() error {
-			return setMainImageHelper(
+			updatedUser, updatedUserImage, err1 = setMainImageHelper(
 				ctx,
 				uTx,
 				&userImageResp,
@@ -658,10 +770,11 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 				newMainImageUrl,
 				newMainImagePath,
 			)
+			return err1
 		})
 
 		ewg.Go(func() error {
-			_, err := uTx.UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+			_, err = uTx.UpdateUserImage(ctx, user_db.UpdateUserImageParams{
 				ID:     oldMainImageId,
 				IsMain: false,
 			})
@@ -678,6 +791,26 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 
 	go func() {
 		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_USER_MAIN_IMAGE_KEY, message.UpdatedUserMainImagePayload{
+			ID:            updatedUser.ID,
+			MainImageUrl:  updatedUser.MainImageUrl,
+			MainImagePath: updatedUser.MainImagePath,
+			UpdatedAt:     updatedUser.UpdatedAt,
+		})
+	}()
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.UPDATED_KEY, message.UpdatedUserImagePayload{
+			ID:        updatedUserImage.ID,
+			IsMain:    updatedUserImage.IsMain,
+			UserID:    updatedUserImage.UserID,
+			UpdatedAt: updatedUserImage.UpdatedAt,
+		})
+	}()
+
+	go func() {
+		ctx := context.Background()
 		s.cacheSvc.DelByPrefix(ctx, shrd_utils.BuildPrefixKey(utils.USER_KEY, userId.String()))
 		s.cacheSvc.DelByPrefix(ctx, utils.USERS_KEY)
 	}()
@@ -686,6 +819,8 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 }
 
 func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId uuid.UUID) {
+	var imageID uuid.UUID
+
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		ewg := errgroup.Group{}
@@ -714,10 +849,19 @@ func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId
 		if err := ewg.Wait(); err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when deleting image", 422)
 		}
+
+		imageID = image.ID
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.DELETED_KEY, message.DeletedUserImagePayload{
+			ID: imageID,
+		})
+	}()
 
 	go func() {
 		ctx := context.Background()

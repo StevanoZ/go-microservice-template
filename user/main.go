@@ -7,6 +7,7 @@ import (
 
 func main() {
 	r := chi.NewRouter()
+
 	config := shrd_utils.CheckAndSetConfig("./app", "app")
 
 	DB := shrd_utils.ConnectDB(config.DBDriver, config.DBSource)

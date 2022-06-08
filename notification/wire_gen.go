@@ -8,7 +8,9 @@ package main
 
 import (
 	"cloud.google.com/go/pubsub"
+	"database/sql"
 	"github.com/StevanoZ/dv-notification/app"
+	"github.com/StevanoZ/dv-notification/db/repository"
 	"github.com/StevanoZ/dv-notification/handler"
 	"github.com/StevanoZ/dv-notification/service"
 	"github.com/StevanoZ/dv-shared/pubsub"
@@ -21,7 +23,8 @@ import (
 
 // Injectors from injector.go:
 
-func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (app.Server, error) {
+func InitializedApp(r *chi.Mux, DB *sql.DB, config *shrd_utils.BaseConfig) (app.Server, error) {
+	repository := querier.NewRepository(DB)
 	client, err := pubsub_client.NewGooglePubSub(config)
 	if err != nil {
 		return nil, err
@@ -29,7 +32,7 @@ func InitializedApp(r *chi.Mux, config *shrd_utils.BaseConfig) (app.Server, erro
 	pubSubClient := pubsub_client.NewPubSubClient(config, client)
 	sendgridClient := shrd_service.NewSgClient(config)
 	emailSvc := shrd_service.NewEmailSvc(sendgridClient, config)
-	notificationSvc := service.NewNotificationSvc(config, pubSubClient, emailSvc)
+	notificationSvc := service.NewNotificationSvc(config, repository, pubSubClient, emailSvc)
 	notificationHandler := handler.NewNotificationHandler(notificationSvc)
 	server := app.NewServer(r, config, notificationHandler)
 	return server, nil
@@ -41,4 +44,4 @@ var pubSubSet = wire.NewSet(wire.Bind(new(pubsub_client.GooglePubSub), new(*pubs
 
 var emailSet = wire.NewSet(wire.Bind(new(shrd_service.EmailClient), new(*sendgrid.Client)), shrd_service.NewSgClient, shrd_service.NewEmailSvc)
 
-var notificationSet = wire.NewSet(service.NewNotificationSvc, handler.NewNotificationHandler)
+var notificationSet = wire.NewSet(querier.NewRepository, service.NewNotificationSvc, handler.NewNotificationHandler)

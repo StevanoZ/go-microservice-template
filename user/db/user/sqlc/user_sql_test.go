@@ -12,9 +12,11 @@ import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/sync/errgroup"
 )
 
 const imageURL = "http://test/image-url"
+const concurrencyNum = 50
 
 func SetUpDB() *sql.DB {
 	config := shrd_utils.LoadBaseConfig("../../../app", "test")
@@ -242,6 +244,27 @@ func TestGetUsersAndPagination(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 4, int(counts))
 
+	txCtx := context.Background()
+	ewg := errgroup.Group{}
+	tx, err := DB.BeginTx(txCtx, nil)
+	defer tx.Commit()
+	assert.NoError(t, err)
+	userRepoTx := userRepo.WithTx(tx)
+
+	// JUST FOR TESTING ERROR ROWS (Concurrency issue)
+	for i := 0; i < concurrencyNum; i++ {
+		ewg.Go(func() error {
+			_, err := userRepoTx.FindUsers(txCtx, FindUsersParams{
+				Offset: 0,
+				Limit:  10,
+			})
+			return err
+		})
+	}
+
+	err = ewg.Wait()
+	assert.Error(t, err)
+
 	// BAD CASE
 	DB.Close()
 	users, err = userRepo.FindUsers(context.Background(), FindUsersParams{
@@ -414,6 +437,24 @@ func TestFindImagesByUserId(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(userImage))
 
+	txCtx := context.Background()
+	ewg := errgroup.Group{}
+	tx, err := DB.BeginTx(txCtx, nil)
+	defer tx.Commit()
+	assert.NoError(t, err)
+	userRepoTx := userRepo.WithTx(tx)
+
+	// JUST FOR TESTING ERROR ROWS (Concurrency issue)
+	for i := 0; i < concurrencyNum; i++ {
+		ewg.Go(func() error {
+			_, err := userRepoTx.FindUserImagesByUserId(txCtx, user.ID)
+			return err
+		})
+	}
+
+	err = ewg.Wait()
+	assert.Error(t, err)
+
 	// BAD CASE
 	DB.Close()
 	userImage, err = userRepo.FindUserImagesByUserId(context.Background(), user.ID)
@@ -421,6 +462,45 @@ func TestFindImagesByUserId(t *testing.T) {
 	assert.Nil(t, userImage)
 }
 
+func TestFindUserImagesByUserIdForUpdate(t *testing.T) {
+	DB := SetUpDB()
+	userRepo := InitUserRepo(t, DB)
+
+	user := createUserMock(userRepo)
+	createMockUserImage(userRepo, user.ID)
+
+	images, err := userRepo.FindUserImagesByUserIdForUpdate(context.Background(), user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, len(images))
+
+	images, err = userRepo.FindUserImagesByUserIdForUpdate(context.Background(), uuid.New())
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(images))
+
+	txCtx := context.Background()
+	ewg := errgroup.Group{}
+	tx, err := DB.BeginTx(txCtx, nil)
+	defer tx.Commit()
+	assert.NoError(t, err)
+	userRepoTx := userRepo.WithTx(tx)
+
+	// JUST FOR TESTING ERROR ROWS (Concurrency issue)
+	for i := 0; i < concurrencyNum; i++ {
+		ewg.Go(func() error {
+			_, err := userRepoTx.FindUserImagesByUserIdForUpdate(txCtx, user.ID)
+			return err
+		})
+	}
+	
+	err = ewg.Wait()
+	assert.Error(t, err)
+
+	DB.Close()
+	images, err = userRepo.FindUserImagesByUserIdForUpdate(context.Background(), user.ID)
+	assert.Error(t, err)
+	assert.Nil(t, images)
+
+}
 func TestDeleteUserImage(t *testing.T) {
 	DB := SetUpDB()
 	defer DB.Close()

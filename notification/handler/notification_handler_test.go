@@ -20,7 +20,6 @@ func initNotificationHandler(notificationSvc *mock_svc.MockNotificationSvc) Noti
 }
 
 func TestNotificationHandler(t *testing.T) {
-	ctx := context.Background()
 	notificationHandlersTestCase := []shrd_helper.TestCaseHandler{
 		{
 			Name:   "Ping (status code 200)",
@@ -72,10 +71,36 @@ func TestNotificationHandler(t *testing.T) {
 		})
 	}
 
-	t.Run("Listen for event", func(t *testing.T) {
+}
+
+func TestListeningTopic(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	notificationSvc := mock_svc.NewMockNotificationSvc(ctrl)
+	notificationHandler := initNotificationHandler(notificationSvc)
+
+	t.Run("Listen for email topic", func(t *testing.T) {
 		ctxCancel, cancel := context.WithCancel(ctx)
-		notificationSvc.EXPECT().ListenAndSendEmail(ctxCancel).Times(1)
-		err := notificationHandler.ListenEvent(ctxCancel)
+		notificationSvc.EXPECT().ListenForEmailTopic(ctxCancel).Times(1)
+		err := notificationHandler.ListenForEmailTopic(ctxCancel)
+		assert.NoError(t, err)
+		cancel()
+	})
+
+	t.Run("Listen for user topic", func(t *testing.T) {
+		ctxCancel, cancel := context.WithCancel(ctx)
+		notificationSvc.EXPECT().ListenForUserTopic(ctxCancel).Times(1)
+		err := notificationHandler.ListenForUserTopic(ctxCancel)
+		assert.NoError(t, err)
+		cancel()
+	})
+
+	t.Run("Listen for user image topic", func(t *testing.T) {
+		ctxCancel, cancel := context.WithCancel(ctx)
+		notificationSvc.EXPECT().ListenForUserImageTopic(ctxCancel).Times(1)
+		err := notificationHandler.ListenForUserImageTopic(ctxCancel)
 		assert.NoError(t, err)
 		cancel()
 	})
