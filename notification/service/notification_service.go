@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 
 	"cloud.google.com/go/pubsub"
 	querier "github.com/StevanoZ/dv-notification/db/repository"
@@ -388,12 +389,12 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				}
 
 				ewg := errgroup.Group{}
-				// mu := sync.Mutex{}
+				mu := sync.Mutex{}
 
 				for _, p := range payloads {
 					payload := p
 					ewg.Go(func() error {
-						//	mu.Lock()
+						mu.Lock()
 						_, err := repoTx.CreateUserImage(ctx, querier.CreateUserImageParams{
 							ID:        payload.ID,
 							UserID:    payload.UserID,
@@ -403,7 +404,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 							CreatedAt: payload.CreatedAt,
 							UpdatedAt: payload.UpdatedAt,
 						})
-						//	mu.Unlock()
+						mu.Unlock()
 						return err
 					})
 				}
