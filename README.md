@@ -46,10 +46,35 @@ Example for failed (< 90%). For this example I have set the threshold to 97%. Th
 
 <img width="925" alt="check-cc-2" src="https://user-images.githubusercontent.com/51188834/171788137-e2ca2f7c-3b1a-48f3-b7f5-fe4a26abdfa5.png">
 
+
+**GCP Pubsub Retry Mechanism<br />**
+Will retry between 1-5 delivery attempt with interval 5 seconds. If still failed will save to persistent storage (PostgesSQL) for avoid data loss.
+
+**Retry failed and save to persistent storage (this example tested on remote machine)<br />**
+
+https://user-images.githubusercontent.com/51188834/172746373-299e7ed9-d75e-46d6-9715-9df6d177ec0b.mp4
+
+
+**But SOMETIMES Retry success and save your day (this example tested on local machine)<br />**
+
+https://user-images.githubusercontent.com/51188834/172746947-216ed378-a6d0-4fac-ae38-9e64ba23ea62.mp4
+
+
+
 ## Tech Related
 
 **Clean Architecture**. <br />
-**Sqlc**. Relatively faster than ORM. As fast as database/sql. <br />
+**PostgesSQL**. <br />
+**Redis**. <br />
+**GCP PubSub**. For message broker. <br />
+**GCP Secret**. Except for local environment. <br />
+**Cloud Run**. For deployment. <br />
 **Chi**. Fast, lightweight, idiomatic. 100% compatible with net/http so you can easily modify it as you want. <br />
+**Sqlc**. Relatively faster than ORM. As fast as database/sql. <br />
 **Google Wire**. Automatically generate Dependency Injection. <br />
 **Golang Migrate**. For database migration. <br />
+**GolangCI Lint**. For linter. <br />
+**Sonar Cloud**. For code quality. <br />
+**Testify/GoMock**. For testing library. <br />
+**Code Coverage**. CodeCov (threshold >= 90%). <br />
+**Commitizen**. For commit controll. <br />
