@@ -563,9 +563,21 @@ func TestVerifyOtp(t *testing.T) {
 			AttemptLeft: 4,
 			OtpCode:     int64(invalidOtpCode),
 		}).DoAndReturn(func(_ interface{}, _ interface{}) (user_db.User, error) {
-			user.AttemptLeft = user.AttemptLeft - 1
+			user.AttemptLeft = 3
 			return user, nil
 		}).Times(1)
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			message.UpdatedUserPayload{
+				ID:          user.ID,
+				Username:    USERNAME,
+				Password:    PASSWORD,
+				PhoneNumber: "",
+				Status:      "not-active",
+				AttemptLeft: 3,
+				OtpCode:     int64(invalidOtpCode),
+				UpdatedAt:   user.UpdatedAt,
+			}).Times(1)
+
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|invalid otp code",
 			StatusCode: 400,
@@ -606,6 +618,11 @@ func TestVerifyOtp(t *testing.T) {
 			AttemptLeft: 4,
 			OtpCode:     int64(invalidOtpCode),
 		}).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+
+		// SHOULD NOT CALL THIS
+		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+			gomock.AssignableToTypeOf(message.UpdatedUserPayload{})).Times(0)
+
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when updating user", UNPROCESSABLE_ENTITY),
 			StatusCode: 422,

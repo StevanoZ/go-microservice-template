@@ -301,10 +301,23 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		if user.OtpCode != int64(otpCode) {
 			params := mapping.ToUpdateUserParams(user)
 			params.AttemptLeft = user.AttemptLeft - 1
-			_, err := s.userRepo.UpdateUser(ctx, params)
+			updtdUser, err := s.userRepo.UpdateUser(ctx, params)
 			if err != nil {
 				return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 			}
+
+			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+				message.UpdatedUserPayload{
+					ID:          updtdUser.ID,
+					Username:    updtdUser.Username,
+					Password:    updtdUser.Password,
+					PhoneNumber: updtdUser.PhoneNumber,
+					OtpCode:     updtdUser.OtpCode,
+					AttemptLeft: updtdUser.AttemptLeft,
+					Status:      updtdUser.Status,
+					UpdatedAt:   updtdUser.UpdatedAt,
+				})
+
 			return shrd_utils.CustomError("invalid otp code", 400)
 		}
 		params := mapping.ToUpdateUserParams(user)
