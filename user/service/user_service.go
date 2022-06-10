@@ -79,6 +79,7 @@ func NewUserSvc(
 
 func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) response.UserResp {
 	userResp := response.UserResp{}
+	var createdUser user_db.User
 	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		user, err := uTx.FindUserByEmail(ctx, input.Email)
@@ -107,37 +108,38 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 		}
 
 		userResp = mapping.ToUserResp(user)
-
-		go func() {
-			ctx := context.Background()
-			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
-				Email:   user.Email,
-				OtpCode: int(user.OtpCode),
-			})
-		}()
-
-		go func() {
-			ctx := context.Background()
-			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.CREATED_KEY, message.CreatedUserPayload{
-				ID:        user.ID,
-				Email:     user.Email,
-				Username:  user.Username,
-				Password:  user.Password,
-				OtpCode:   user.OtpCode,
-				CreatedAt: user.CreatedAt,
-				UpdatedAt: user.UpdatedAt,
-			})
-		}()
-
-		go func() {
-			ctx := context.Background()
-			s.cacheSvc.DelByPrefix(ctx, utils.USERS_KEY)
-		}()
+		createdUser = user
 
 		return nil
 	})
 
 	shrd_utils.PanicIfError(err)
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.EMAIL_TOPIC}, message.SEND_OTP_KEY, message.OtpPayload{
+			Email:   createdUser.Email,
+			OtpCode: int(createdUser.OtpCode),
+		})
+	}()
+
+	go func() {
+		ctx := context.Background()
+		s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.CREATED_KEY, message.CreatedUserPayload{
+			ID:        createdUser.ID,
+			Email:     createdUser.Email,
+			Username:  createdUser.Username,
+			Password:  createdUser.Password,
+			OtpCode:   createdUser.OtpCode,
+			CreatedAt: createdUser.CreatedAt,
+			UpdatedAt: createdUser.UpdatedAt,
+		})
+	}()
+
+	go func() {
+		ctx := context.Background()
+		s.cacheSvc.DelByPrefix(ctx, utils.USERS_KEY)
+	}()
 
 	return userResp
 }
@@ -306,17 +308,19 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 				return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 			}
 
-			s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
-				message.UpdatedUserPayload{
-					ID:          updtdUser.ID,
-					Username:    updtdUser.Username,
-					Password:    updtdUser.Password,
-					PhoneNumber: updtdUser.PhoneNumber,
-					OtpCode:     updtdUser.OtpCode,
-					AttemptLeft: updtdUser.AttemptLeft,
-					Status:      updtdUser.Status,
-					UpdatedAt:   updtdUser.UpdatedAt,
-				})
+			go func() {
+				s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
+					message.UpdatedUserPayload{
+						ID:          updtdUser.ID,
+						Username:    updtdUser.Username,
+						Password:    updtdUser.Password,
+						PhoneNumber: updtdUser.PhoneNumber,
+						OtpCode:     updtdUser.OtpCode,
+						AttemptLeft: updtdUser.AttemptLeft,
+						Status:      updtdUser.Status,
+						UpdatedAt:   updtdUser.UpdatedAt,
+					})
+			}()
 
 			return shrd_utils.CustomError("invalid otp code", 400)
 		}
