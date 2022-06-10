@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/DATA-DOG/go-sqlmock"
 	querier "github.com/StevanoZ/dv-notification/db/repository"
 	mock_querier "github.com/StevanoZ/dv-notification/db/repository/mock"
 	"github.com/google/uuid"
@@ -77,15 +79,15 @@ func setupPullMsgMock(
 	}
 }
 
-func setupAndMockTx(t *testing.T, repo *mock_querier.MockRepository) {
-	config := shrd_utils.LoadBaseConfig("../app", "test")
-	DB := shrd_utils.ConnectDB(config.DBDriver, config.DBSource)
-
-	tx, err := DB.BeginTx(context.Background(), nil)
+func setupAndMockTx(t *testing.T, repo *mock_querier.MockRepository) *sql.DB {
+	DB, mock, err := sqlmock.New()
 	assert.NoError(t, err)
 
+	mock.ExpectBegin()
 	repo.EXPECT().GetDB().Return(DB).Times(1)
-	repo.EXPECT().WithTx(gomock.AssignableToTypeOf(tx)).Return(repo).Times(1)
+	repo.EXPECT().WithTx(gomock.AssignableToTypeOf(&sql.Tx{})).Return(repo).Times(1)
+
+	return DB
 }
 
 func marshalData(t *testing.T, data any) []byte {
@@ -248,7 +250,9 @@ func TestListenForUserTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully created user", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.CREATED_KEY, data)
@@ -265,7 +269,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed creating user (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.CREATED_KEY, data, attempt)
@@ -284,7 +290,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed creating user (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.CREATED_KEY, data, attempt)
@@ -336,7 +344,9 @@ func TestListenForUserTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully updated user", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data)
@@ -356,7 +366,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -377,7 +389,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user (user not found)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -399,7 +413,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -445,7 +461,9 @@ func TestListenForUserTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully updated user main image", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_USER_MAIN_IMAGE_KEY, data)
@@ -465,7 +483,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user main image (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.UPDATED_USER_MAIN_IMAGE_KEY, data, attempt)
@@ -486,7 +506,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user main image (user not found)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_USER_MAIN_IMAGE_KEY, data, attempt)
@@ -508,7 +530,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating user main image (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_USER_MAIN_IMAGE_KEY, data, attempt)
@@ -545,7 +569,9 @@ func TestListenForUserTopic(t *testing.T) {
 		})
 
 		t.Run("Not consume the message (no matches key)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(UNKNOWN_KEY, data)
@@ -637,7 +663,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully created image", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.CREATED_KEY, data, attempt)
@@ -656,7 +684,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed creating image (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.CREATED_KEY, data, attempt)
@@ -676,7 +706,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed creating image (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.CREATED_KEY, data, attempt)
@@ -719,7 +751,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully updated image", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -742,7 +776,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating image (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -764,7 +800,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating image (user image not found)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -791,7 +829,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating image (user old main image not found)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -818,7 +858,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed updating image (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.UPDATED_KEY, data, attempt)
@@ -858,7 +900,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		}
 
 		t.Run("Successfully deleted user image", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.DELETED_KEY, data, attempt)
@@ -878,7 +922,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed deleting user image (unmarshal json)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, FAILED)
 				msg := buildPubsubMsg(message.DELETED_KEY, data, attempt)
@@ -900,7 +946,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed deleting user image (user image not found)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.DELETED_KEY, data, attempt)
@@ -922,7 +970,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Failed deleting user image (not save to DB)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(message.DELETED_KEY, data, attempt)
@@ -963,7 +1013,9 @@ func TestListenForUserImageTopic(t *testing.T) {
 		})
 
 		t.Run("Not consume the message (no matches key)", func(t *testing.T) {
-			setupAndMockTx(t, repository)
+			DB := setupAndMockTx(t, repository)
+			defer DB.Close()
+			
 			setupPullMsgMock(ctx, message.USER_IMAGE_TOPIC, pubsubClient, func(_, _, _ interface{}, cb func(ctx context.Context, msg *pubsub.Message)) error {
 				data := marshalData(t, payload)
 				msg := buildPubsubMsg(UNKNOWN_KEY, data, attempt)

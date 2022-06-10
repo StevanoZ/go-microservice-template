@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	shrd_helper "github.com/StevanoZ/dv-shared/helper"
 	message "github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_token "github.com/StevanoZ/dv-shared/token"
+	"github.com/go-redis/redis/v8"
 
 	shrd_mock_svc "github.com/StevanoZ/dv-shared/service/mock"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
@@ -24,6 +26,7 @@ import (
 	"github.com/StevanoZ/dv-user/utils"
 
 	mock_user_repo "github.com/StevanoZ/dv-user/db/user/sqlc/mock"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -48,10 +51,11 @@ const (
 	TEST_IMAGE_3         = "test-image-3"
 )
 
-func LoadConfigAndSetUpDb() (*shrd_utils.BaseConfig, *sql.DB) {
+func LoadConfigAndSetUpDb() (*shrd_utils.BaseConfig, *sql.DB, sqlmock.Sqlmock) {
 	config := shrd_utils.LoadBaseConfig("../app", "test")
-	DB := shrd_utils.ConnectDB(config.DBDriver, config.DBSource)
-	return config, DB
+	DB, mock, _ := sqlmock.New()
+
+	return config, DB, mock
 }
 
 func initUserSvc(ctrl *gomock.Controller, config *shrd_utils.BaseConfig) (
@@ -65,19 +69,29 @@ func initUserSvc(ctrl *gomock.Controller, config *shrd_utils.BaseConfig) (
 	fileSvc := shrd_mock_svc.NewMockFileSvc(ctrl)
 	userRepo := mock_user_repo.NewMockUserRepo(ctrl)
 	tokenMaker, _ := shrd_token.NewPasetoMaker(config)
-	redisClient := shrd_service.NewRedisClientForTesting(config)
-	cacheSvc := shrd_service.NewCacheSvc(config, redisClient)
+	mr, _ := miniredis.Run()
+	mockRedisClient := redis.NewClient(&redis.Options{
+		Addr: mr.Addr(),
+	})
+	cacheSvc := shrd_service.NewCacheSvc(config, mockRedisClient)
 
 	userSvc := NewUserSvc(userRepo, fileSvc, pubSubClient, cacheSvc, tokenMaker, config)
 
 	return userSvc, userRepo, fileSvc, pubSubClient, cacheSvc
 }
 
-func setupAndMockTx(t *testing.T, DB *sql.DB, userRepo *mock_user_repo.MockUserRepo) {
-	tx, err := DB.BeginTx(context.Background(), nil)
-	assert.NoError(t, err)
+func setupAndMockCommitTx(DB *sql.DB, userRepo *mock_user_repo.MockUserRepo, sqlMock sqlmock.Sqlmock) {
+	sqlMock.ExpectBegin()
+	sqlMock.ExpectCommit()
 	userRepo.EXPECT().GetDB().Return(DB).Times(1)
-	userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(tx)).Return(userRepo).Times(1)
+	userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(&sql.Tx{})).Return(userRepo).Times(1)
+}
+
+func setupAndMockRollbackTx(DB *sql.DB, userRepo *mock_user_repo.MockUserRepo, sqlMock sqlmock.Sqlmock) {
+	sqlMock.ExpectBegin()
+	sqlMock.ExpectRollback()
+	userRepo.EXPECT().GetDB().Return(DB).Times(1)
+	userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(&sql.Tx{})).Return(userRepo).Times(1)
 }
 
 func createUser() user_db.User {
@@ -237,7 +251,7 @@ func TestSignUp(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 
 	defer DB.Close()
 
@@ -249,8 +263,8 @@ func TestSignUp(t *testing.T) {
 		var userId uuid.UUID
 		otpCode := shrd_utils.RandomInt(0, 999999)
 		user := createUser()
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
-		setupAndMockTx(t, DB, userRepo)
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
 		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserParams) (user_db.User, error) {
@@ -272,11 +286,13 @@ func TestSignUp(t *testing.T) {
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.SignUp(ctx, request.SignUpReq{Email: EMAIL, Username: USERNAME, Password: PASSWORD})
+			time.Sleep(300 * time.Millisecond)
 			assert.Equal(t, userId, resp.ID)
 		})
 	})
 	t.Run("Sql error (status code 422)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -292,7 +308,8 @@ func TestSignUp(t *testing.T) {
 	})
 
 	t.Run("Email already in used (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(createUser(), nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -307,7 +324,8 @@ func TestSignUp(t *testing.T) {
 		})
 	})
 	t.Run("Failed when creating user (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
 		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
@@ -334,7 +352,7 @@ func TestLogIn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	ctx := context.Background()
 	defer DB.Close()
 
@@ -354,8 +372,9 @@ func TestLogIn(t *testing.T) {
 		Username:      USERNAME,
 		MainImagePath: imagePath,
 	}
+
 	t.Run("Success Request", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
 		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return(preSignedUrl, nil).Times(1)
@@ -369,7 +388,8 @@ func TestLogIn(t *testing.T) {
 	})
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -381,7 +401,7 @@ func TestLogIn(t *testing.T) {
 	})
 
 	t.Run("Invalid request status = not-active (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{Status: "not-active"}, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -393,7 +413,7 @@ func TestLogIn(t *testing.T) {
 	})
 
 	t.Run("Invalid credential (status code 401)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			Password: PASSWORD,
@@ -409,8 +429,10 @@ func TestLogIn(t *testing.T) {
 			userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
 		})
 	})
+
 	t.Run("Not call get pre sign URL when user main image path is empty", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			ID:            USER_ID,
 			Status:        "active",
@@ -425,8 +447,10 @@ func TestLogIn(t *testing.T) {
 			assert.NotNil(t, resp.Token)
 		})
 	})
+
 	t.Run("Failed when getting pre sign URL", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
 		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
@@ -443,14 +467,15 @@ func TestVerifyOtp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	ctx := context.Background()
 	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
+
 		parsedOtpCode, err := strconv.Atoi(OTP_CODE)
 		assert.NoError(t, err)
 
@@ -493,7 +518,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -505,7 +531,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			Status: "active",
 		}, nil).Times(1)
@@ -519,7 +546,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid request attempt left = 0 (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			AttemptLeft: 0,
 		}, nil).Times(1)
@@ -533,7 +561,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Expired otp code (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			AttemptLeft: 5,
 			UpdatedAt:   time.Now().Add(-5 * time.Minute),
@@ -548,7 +577,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid otp code (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		invalidOtpCode := 123456
 		user := createUser()
 		user.OtpCode = int64(invalidOtpCode)
@@ -587,7 +617,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid otp code, failed parsing input (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		otpCode := "1234xx"
 		strconvErr := "strconv.Atoi: parsing \"1234xx\": invalid syntax|invalid otp code"
 
@@ -603,7 +634,8 @@ func TestVerifyOtp(t *testing.T) {
 		})
 	})
 	t.Run("Invalid otp code and failed updating user (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		invalidOtpCode := 123456
 		user := createUser()
 		user.OtpCode = int64(invalidOtpCode)
@@ -632,7 +664,8 @@ func TestVerifyOtp(t *testing.T) {
 	})
 
 	t.Run("Valid otp code and failed updating (status code 422)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		parsedOtpCode, err := strconv.Atoi(OTP_CODE)
 		assert.NoError(t, err)
 
@@ -668,13 +701,13 @@ func TestResendOtp(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		user := createUser()
 		user.Email = EMAIL
@@ -701,7 +734,7 @@ func TestResendOtp(t *testing.T) {
 	})
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, errors.New(NOT_FOUND)).
 			Times(1)
@@ -715,7 +748,7 @@ func TestResendOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			Status: "active",
@@ -731,7 +764,7 @@ func TestResendOtp(t *testing.T) {
 	})
 
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
 			AttemptLeft: 0,
@@ -747,7 +780,7 @@ func TestResendOtp(t *testing.T) {
 	})
 
 	t.Run("Failed when updating user (status code 422)", func(t *testing.T) {
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		user := createUser()
 		user.Email = EMAIL
@@ -781,7 +814,7 @@ func TestUpdateUser(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
@@ -792,7 +825,8 @@ func TestUpdateUser(t *testing.T) {
 			Username:    "TestX",
 			PhoneNumber: "082112158745",
 		}
-		setupAndMockTx(t, DB, userRepo)
+
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 		user := createUser()
 		user.ID = userId
 
@@ -837,7 +871,8 @@ func TestUpdateUser(t *testing.T) {
 			Username:    "TestX",
 			PhoneNumber: "082112158745",
 		}
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
+
 		userRepo.EXPECT().FindUserById(ctx, userId).Return(user_db.User{}, errors.New(NOT_FOUND)).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -854,7 +889,8 @@ func TestUpdateUser(t *testing.T) {
 			Username:    "TestX",
 			PhoneNumber: "082112158745",
 		}
-		setupAndMockTx(t, DB, userRepo)
+
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 		user := createUser()
 		user.ID = userId
 
@@ -887,14 +923,15 @@ func TestUploadImages(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Request Success and SET user main image", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
+
 		user := createUser()
 		user.ID = userId
 
@@ -936,7 +973,7 @@ func TestUploadImages(t *testing.T) {
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
 		// FOR UNWAITED GO ROUTINES
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 		userImages, firstImageId := createUserWithImages(userId, false)
 
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(
@@ -971,7 +1008,8 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Request Success and NOT SET user main image", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
+
 		user := createUser()
 		user.ID = userId
 
@@ -999,7 +1037,7 @@ func TestUploadImages(t *testing.T) {
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
 		// FOR UNWAITED GO ROUTINES
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 		userImages, _ := createUserWithImages(userId, true)
 
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(
@@ -1025,7 +1063,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Upload more than 10 (status code 400)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		filesHeader := shrd_helper.CreateFilesHeader(11, IMAGE_NAME)
 
@@ -1041,7 +1079,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Failed when opening file (status code 400)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		filesHeader := []*multipart.FileHeader{
 			{Filename: TEST_IMAGE_3, Size: 1024},
@@ -1059,7 +1097,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Failed when uploading file (status code 422)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
@@ -1067,10 +1105,8 @@ func TestUploadImages(t *testing.T) {
 			Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(3)
 
 		// IF ERROR SHOULD NOT CALL THIS
-		tx, err := DB.BeginTx(context.Background(), nil)
-		assert.NoError(t, err)
 		userRepo.EXPECT().GetDB().Return(DB).Times(0)
-		userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(tx)).Return(userRepo).Times(0)
+		userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(&sql.Tx{})).Return(userRepo).Times(0)
 		userRepo.EXPECT().FindUserWithImages(ctx, userId).Times(0)
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
@@ -1085,7 +1121,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Failed when creating user image (status code 422)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
@@ -1095,10 +1131,8 @@ func TestUploadImages(t *testing.T) {
 			Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).Times(3)
 
 		// IF ERROR SHOULD NOT CALL THIS
-		tx, err := DB.BeginTx(context.Background(), nil)
-		assert.NoError(t, err)
 		userRepo.EXPECT().GetDB().Return(DB).Times(0)
-		userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(tx)).Return(userRepo).Times(0)
+		userRepo.EXPECT().WithTx(gomock.AssignableToTypeOf(&sql.Tx{})).Return(userRepo).Times(0)
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Times(0)
 		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
 		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
@@ -1117,7 +1151,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Go Routine failed when get user images with userId", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
@@ -1126,7 +1160,7 @@ func TestUploadImages(t *testing.T) {
 		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			Return(user_db.UserImage{}, nil).Times(3)
 
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return([]user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).
 			Times(1)
 
@@ -1147,7 +1181,7 @@ func TestUploadImages(t *testing.T) {
 
 	t.Run("Go Routine failed when updating image", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
@@ -1156,7 +1190,7 @@ func TestUploadImages(t *testing.T) {
 		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			Return(user_db.UserImage{}, nil).Times(3)
 
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 		userImages, _ := createUserWithImages(userId, false)
 
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(unmarshalUserImages(t, userImages), nil).
@@ -1185,7 +1219,7 @@ func TestSetMainImage(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, _, pubsubClient, _ := initUserSvc(ctrl, config)
@@ -1196,7 +1230,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		userImages, oldMainImageId := createUserWithImages(userId, true)
 		images := []user_db.UserImage{}
@@ -1241,7 +1275,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
 			Return([]user_db.UserImage{}, errors.New(NOT_FOUND)).Times(1)
@@ -1258,7 +1292,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("Can't set the same main image (status code 400)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		_, mainImageId := createUserWithImages(userId, true)
 		images[0].ID = mainImageId
@@ -1276,7 +1310,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("Image not found (status code 404)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
 			Return(images, nil).Times(1)
@@ -1291,7 +1325,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("Failed updating user main image (status code 422)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userImages, oldMainImageId := createUserWithImages(userId, true)
 		images := []user_db.UserImage{}
@@ -1333,7 +1367,7 @@ func TestSetMainImage(t *testing.T) {
 
 	t.Run("status code 422 (failed updating user image)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		userImages, oldMainImageId := createUserWithImages(userId, true)
 		images := []user_db.UserImage{}
@@ -1379,14 +1413,14 @@ func TestDeleteImage(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, sqlMock := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, pubsubClient, _ := initUserSvc(ctrl, config)
 
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
 		_, imageId := createUserWithImages(userId, false)
 		path := fmt.Sprintf("users/%s/%s", userId, IMAGE_NAME)
@@ -1412,7 +1446,7 @@ func TestDeleteImage(t *testing.T) {
 
 	t.Run("Image not found (status code 404)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		imageId := uuid.New()
 
@@ -1433,7 +1467,7 @@ func TestDeleteImage(t *testing.T) {
 
 	t.Run("Can't delete the main image (status code 400)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		_, mainImageId := createUserWithImages(userId, true)
 
@@ -1458,7 +1492,7 @@ func TestDeleteImage(t *testing.T) {
 
 	t.Run("Not authorize (status code 403)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		_, mainImageId := createUserWithImages(userId, true)
 
@@ -1483,7 +1517,7 @@ func TestDeleteImage(t *testing.T) {
 
 	t.Run("Failed deleting image (status code 422)", func(t *testing.T) {
 		userId := USER_ID
-		setupAndMockTx(t, DB, userRepo)
+		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
 		_, imageId := createUserWithImages(userId, false)
 		path := fmt.Sprintf("users/%s/%s", userId, IMAGE_NAME)
@@ -1517,7 +1551,7 @@ func TestGetUsers(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, _ := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)
@@ -1636,7 +1670,7 @@ func TestGetUserImages(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, _ := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)
@@ -1726,7 +1760,7 @@ func TestGetUser(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-	config, DB := LoadConfigAndSetUpDb()
+	config, DB, _ := LoadConfigAndSetUpDb()
 	defer DB.Close()
 
 	userSvc, userRepo, fileSvc, _, cacheSvc := initUserSvc(ctrl, config)

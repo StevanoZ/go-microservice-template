@@ -13,6 +13,7 @@ require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/aead/chacha20poly1305 v0.0.0-20170617001512-233f39982aeb // indirect
 	github.com/aead/poly1305 v0.0.0-20180717145839-3fee0db0b635 // indirect
+	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.3 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.1 // indirect
@@ -76,6 +77,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.11.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
+	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
@@ -96,7 +98,9 @@ require (
 
 require (
 	cloud.google.com/go/pubsub v1.21.1
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/StevanoZ/dv-shared v1.5.4
+	github.com/alicebob/miniredis/v2 v2.21.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.7
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-openapi/runtime v0.24.1

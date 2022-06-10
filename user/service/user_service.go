@@ -844,15 +844,15 @@ func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId
 		image, err := uTx.FindUserImageById(ctx, imageId)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
-			shrd_utils.PanicIfError(shrd_utils.CustomErrorWithTrace(err, "image not found", 404))
+			return shrd_utils.CustomErrorWithTrace(err, "image not found", 404)
 		}
 
 		if image.UserID != userId {
-			shrd_utils.PanicIfError(shrd_utils.CustomError("not authorize to perform this operation", 403))
+			return shrd_utils.CustomError("not authorize to perform this operation", 403)
 		}
 
 		if image.IsMain {
-			shrd_utils.PanicIfError(shrd_utils.CustomError("you can't delete the main image", 400))
+			return shrd_utils.CustomError("you can't delete the main image", 400)
 		}
 
 		ewg.Go(func() error {
