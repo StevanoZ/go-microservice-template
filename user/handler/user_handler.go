@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 
 	shrd_middleware "github.com/StevanoZ/dv-shared/middleware"
@@ -9,7 +8,7 @@ import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/StevanoZ/dv-user/dtos/request"
 	"github.com/StevanoZ/dv-user/service"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/go-openapi/runtime/middleware"
 )
 
@@ -76,7 +75,7 @@ func (h *UserHandlerImpl) SignUp(w http.ResponseWriter, r *http.Request) {
 	var input request.SignUpReq
 	shrd_utils.ValidateBodyPayload(r.Body, &input)
 
-	resp := h.userSvc.SignUp(context.Background(), input)
+	resp := h.userSvc.SignUp(r.Context(), input)
 	shrd_utils.GenerateSuccessResp(w, resp, 201)
 }
 
@@ -84,7 +83,7 @@ func (h *UserHandlerImpl) LogIn(w http.ResponseWriter, r *http.Request) {
 	var input request.LogInReq
 	shrd_utils.ValidateBodyPayload(r.Body, &input)
 
-	resp := h.userSvc.LogIn(context.Background(), input)
+	resp := h.userSvc.LogIn(r.Context(), input)
 	shrd_utils.GenerateSuccessResp(w, resp, 200)
 }
 
@@ -103,7 +102,7 @@ func (h *UserHandlerImpl) VerifyOtp(w http.ResponseWriter, r *http.Request) {
 	var input request.VerifyOtpReq
 	shrd_utils.ValidateBodyPayload(r.Body, &input)
 
-	resp := h.userSvc.VerifyOtp(context.Background(), input)
+	resp := h.userSvc.VerifyOtp(r.Context(), input)
 	shrd_utils.GenerateSuccessResp(w, resp, 200)
 }
 
@@ -111,7 +110,7 @@ func (h *UserHandlerImpl) ResendOtp(w http.ResponseWriter, r *http.Request) {
 	var input request.ResendOtpReq
 	shrd_utils.ValidateBodyPayload(r.Body, &input)
 
-	h.userSvc.ResendOtp(context.Background(), input)
+	h.userSvc.ResendOtp(r.Context(), input)
 	shrd_utils.GenerateSuccessResp(w, nil, 200)
 }
 
@@ -157,7 +156,7 @@ func (h *UserHandlerImpl) GetUsers(w http.ResponseWriter, r *http.Request) {
 		SortBy:      sortByQuery,
 	}
 
-	resp := h.userSvc.GetUsers(context.Background(), input)
+	resp := h.userSvc.GetUsers(r.Context(), input)
 	shrd_utils.GenerateSuccessResp(w, resp, 200)
 }
 

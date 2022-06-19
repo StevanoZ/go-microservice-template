@@ -10,7 +10,9 @@ import (
 	shrd_middleware "github.com/StevanoZ/dv-shared/middleware"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/StevanoZ/dv-user/handler"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
+	chitrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/go-chi/chi"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 type Server interface {
@@ -36,6 +38,15 @@ func NewServer(
 }
 
 func (s *ServerImpl) Start() {
+	// Start the tracer
+	tracer.Start(
+		tracer.WithService(s.config.ServiceName),
+		tracer.WithEnv(s.config.Environment),
+		tracer.WithAgentAddr(s.config.DATA_DOG_AGENT_HOST),
+	)
+	defer tracer.Stop()
+
+	s.route.Use(chitrace.Middleware(chitrace.WithServiceName(s.config.ServiceName)))
 	shrd_middleware.SetupMiddleware(s.route, s.config)
 	s.userHandler.SetupUserRoutes(s.route)
 

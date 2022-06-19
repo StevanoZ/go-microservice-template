@@ -9,7 +9,7 @@ import (
 	http "net/http"
 	reflect "reflect"
 
-	chi "github.com/go-chi/chi/v5"
+	chi "github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -36,16 +36,46 @@ func (m *MockNotificationHandler) EXPECT() *MockNotificationHandlerMockRecorder 
 	return m.recorder
 }
 
-// ListenEvent mocks base method.
-func (m *MockNotificationHandler) ListenEvent(ctx context.Context, isEndlessly bool) {
+// ListenForEmailTopic mocks base method.
+func (m *MockNotificationHandler) ListenForEmailTopic(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ListenEvent", ctx, isEndlessly)
+	ret := m.ctrl.Call(m, "ListenForEmailTopic", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// ListenEvent indicates an expected call of ListenEvent.
-func (mr *MockNotificationHandlerMockRecorder) ListenEvent(ctx, isEndlessly interface{}) *gomock.Call {
+// ListenForEmailTopic indicates an expected call of ListenForEmailTopic.
+func (mr *MockNotificationHandlerMockRecorder) ListenForEmailTopic(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenEvent", reflect.TypeOf((*MockNotificationHandler)(nil).ListenEvent), ctx, isEndlessly)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForEmailTopic", reflect.TypeOf((*MockNotificationHandler)(nil).ListenForEmailTopic), ctx)
+}
+
+// ListenForUserImageTopic mocks base method.
+func (m *MockNotificationHandler) ListenForUserImageTopic(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListenForUserImageTopic", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ListenForUserImageTopic indicates an expected call of ListenForUserImageTopic.
+func (mr *MockNotificationHandlerMockRecorder) ListenForUserImageTopic(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForUserImageTopic", reflect.TypeOf((*MockNotificationHandler)(nil).ListenForUserImageTopic), ctx)
+}
+
+// ListenForUserTopic mocks base method.
+func (m *MockNotificationHandler) ListenForUserTopic(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListenForUserTopic", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ListenForUserTopic indicates an expected call of ListenForUserTopic.
+func (mr *MockNotificationHandlerMockRecorder) ListenForUserTopic(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenForUserTopic", reflect.TypeOf((*MockNotificationHandler)(nil).ListenForUserTopic), ctx)
 }
 
 // Ping mocks base method.

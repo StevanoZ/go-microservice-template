@@ -10,7 +10,7 @@ import (
 	"github.com/StevanoZ/dv-notification/handler"
 	mock_svc "github.com/StevanoZ/dv-notification/service/mock"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )

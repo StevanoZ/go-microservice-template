@@ -5,17 +5,24 @@ go 1.18
 require (
 	cloud.google.com/go/pubsub v1.21.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/go-chi/chi/v5 v5.0.7
+	github.com/go-chi/chi v1.5.4
 	github.com/go-openapi/runtime v0.24.1
 	github.com/golang/mock v1.6.0
 	github.com/google/wire v0.5.0
 	github.com/stretchr/testify v1.7.1
+	go.uber.org/zap v1.17.0
+	gopkg.in/DataDog/dd-trace-go.v1 v1.38.1
 )
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.6.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
+	github.com/DataDog/datadog-agent/pkg/obfuscate v0.0.0-20211129110424-6491aa3bf583 // indirect
+	github.com/DataDog/datadog-go v4.8.2+incompatible // indirect
+	github.com/DataDog/datadog-go/v5 v5.0.2 // indirect
+	github.com/DataDog/sketches-go v1.0.0 // indirect
+	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
@@ -24,7 +31,9 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/go-chi/cors v1.2.1 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
 	github.com/go-openapi/errors v0.20.2 // indirect
@@ -38,6 +47,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/golang-migrate/migrate/v4 v4.15.2 // indirect
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
@@ -48,13 +58,18 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/o1egl/paseto v1.0.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/tinylib/msgp v1.1.2 // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/net v0.0.0-20220412020605-290c469a71a5 // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
+	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
+	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/api v0.76.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220426171045-31bebdecfb46 // indirect
@@ -63,7 +78,7 @@ require (
 )
 
 require (
-	github.com/StevanoZ/dv-shared v1.5.4
+	github.com/StevanoZ/dv-shared v1.5.13
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect

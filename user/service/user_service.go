@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"mime/multipart"
 	"path/filepath"
 	"strconv"
@@ -78,12 +77,17 @@ func NewUserSvc(
 }
 
 func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) response.UserResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.SignUp")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userResp := response.UserResp{}
 	var createdUser user_db.User
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
-		user, err := uTx.FindUserByEmail(ctx, input.Email)
 
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
+		shrd_utils.CheckTracer(fuTrc, err)
 		if err != nil && err != sql.ErrNoRows {
 			return shrd_utils.CustomError(err.Error(), 422)
 		}
@@ -102,7 +106,9 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 		otpCode := shrd_utils.RandomInt(0, 999999)
 		params := mapping.ToCreateUserParams(input)
 		params.OtpCode = otpCode
-		user, err = uTx.CreateUser(ctx, params)
+		cuCtx, cuTrc := shrd_utils.CreateTracer(svcCtx, "repo.CreateUser")
+		user, err = uTx.CreateUser(cuCtx, params)
+		shrd_utils.CheckTracer(cuTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when creating user", 422)
 		}
@@ -145,8 +151,11 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 }
 
 func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) response.UserWithTokenResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.LogIn")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userWithTokenResp := response.UserWithTokenResp{}
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		ewg := errgroup.Group{}
 		token := ""
 		preSignedUrl := ""
@@ -154,7 +163,9 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 		var err2 error
 
 		uTx := s.userRepo.WithTx(tx)
-		user, err := uTx.FindUserByEmail(ctx, input.Email)
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
+		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
@@ -170,18 +181,23 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 		}
 
 		ewg.Go(func() error {
+			_, ctTrc := shrd_utils.CreateTracer(svcCtx, "CreateToken")
 			token, _, err1 = s.tokenMaker.CreateToken(shrd_token.PayloadParams{
 				UserId: user.ID,
 				Email:  user.Email,
 				Status: user.Status,
 			}, s.config.AccessTokenDuration)
+			shrd_utils.CheckTracer(ctTrc, err1)
 
 			return err1
 		})
 
 		ewg.Go(func() error {
 			if user.MainImagePath != "" {
-				preSignedUrl, err2 = s.fileSvc.GetPreSignUrl(ctx, user.MainImagePath)
+				psCtx, psTrc := shrd_utils.CreateTracer(svcCtx, "GetPreSignUrl")
+				preSignedUrl, err2 = s.fileSvc.GetPreSignUrl(psCtx, user.MainImagePath)
+				shrd_utils.CheckTracer(psTrc, err)
+
 				return err2
 			}
 			return nil
@@ -204,18 +220,24 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 }
 
 func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input request.UpdateUserReq) response.UserResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.UpdateUser")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userResp := response.UserResp{}
 	updatedUser := user_db.User{}
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
-		user, err := uTx.FindUserById(ctx, userId)
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserById")
+		user, err := uTx.FindUserById(fuCtx, userId)
+		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
 		}
 
-		user, err = uTx.UpdateUser(ctx, user_db.UpdateUserParams{
+		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+		user, err = uTx.UpdateUser(uuCtx, user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    input.Username,
 			PhoneNumber: input.PhoneNumber,
@@ -224,7 +246,7 @@ func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input re
 			AttemptLeft: user.AttemptLeft,
 			Status:      user.Status,
 		})
-
+		shrd_utils.CheckTracer(uuTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 		}
@@ -283,13 +305,18 @@ func verifyOtpHelper(user user_db.User, input request.VerifyOtpReq) (int, error)
 }
 
 func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq) response.UserWithTokenResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.VerifyOtp")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userWithTokenResp := response.UserWithTokenResp{}
 	updatedUser := user_db.User{}
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
-		user, err := uTx.FindUserByEmail(ctx, input.Email)
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
+		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
@@ -303,12 +330,15 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		if user.OtpCode != int64(otpCode) {
 			params := mapping.ToUpdateUserParams(user)
 			params.AttemptLeft = user.AttemptLeft - 1
-			updtdUser, err := s.userRepo.UpdateUser(ctx, params)
+			uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+			updtdUser, err := s.userRepo.UpdateUser(uuCtx, params)
+			shrd_utils.CheckTracer(uuTrc, err)
 			if err != nil {
 				return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 			}
 
 			go func() {
+				ctx := context.Background()
 				s.pubsubClient.CheckTopicAndPublish(ctx, []string{message.USER_TOPIC}, message.UPDATED_KEY,
 					message.UpdatedUserPayload{
 						ID:          updtdUser.ID,
@@ -329,19 +359,22 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		params.AttemptLeft = 0
 		params.Status = active
 
-		user, err = uTx.UpdateUser(ctx, params)
-
+		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+		user, err = uTx.UpdateUser(uuCtx, params)
+		shrd_utils.CheckTracer(uuTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 		}
 
 		userWithTokenResp = mapping.ToUserWithTokenResp(user)
 
+		_, ctTrc := shrd_utils.CreateTracer(svcCtx, "CreateToken")
 		token, _, err := s.tokenMaker.CreateToken(shrd_token.PayloadParams{
 			UserId: user.ID,
 			Email:  user.Email,
 			Status: user.Status,
 		}, s.config.AccessTokenDuration)
+		shrd_utils.CheckTracer(ctTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when creating token", 422)
 		}
@@ -375,11 +408,16 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 }
 
 func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq) {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.ResendOtp")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	var updatedUser user_db.User
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
-		user, err := uTx.FindUserByEmail(ctx, input.Email)
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
+		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
@@ -395,7 +433,8 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 
 		otpCode := shrd_utils.RandomInt(0, 999999)
 
-		user, err = uTx.UpdateUser(ctx, user_db.UpdateUserParams{
+		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUserParams")
+		user, err = uTx.UpdateUser(uuCtx, user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    user.Username,
 			Password:    user.Password,
@@ -404,7 +443,7 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 			AttemptLeft: user.AttemptLeft - 1,
 			OtpCode:     otpCode,
 		})
-
+		shrd_utils.CheckTracer(uuTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUpdatingUser, 422)
 		}
@@ -451,7 +490,9 @@ func uploadImagesHelper(
 	newFilename := fmt.Sprintf("%s.%s", uuid.New(), ext)
 	filepath := fmt.Sprintf("users/%s/%s", userId, newFilename)
 
-	url, err := fileSvc.UploadPrivateFile(ctx, file, filepath)
+	upfCtx, upfTrc := shrd_utils.CreateTracer(ctx, "UploadPrivateFile")
+	url, err := fileSvc.UploadPrivateFile(upfCtx, file, filepath)
+	shrd_utils.CheckTracer(upfTrc, err)
 	if err != nil {
 		return user_db.UserImage{}, err
 	}
@@ -465,7 +506,9 @@ func uploadImagesHelper(
 
 	// FOR AVOID ERROR ROWS NOT CLOSE (Concurrency issue)
 	mu.Lock()
-	image, err := uTx.CreateUserImage(ctx, params)
+	cuiCtx, cuiTrc := shrd_utils.CreateTracer(ctx, "repo.CreateUserImage")
+	image, err := uTx.CreateUserImage(cuiCtx, params)
+	shrd_utils.CheckTracer(cuiTrc, err)
 	mu.Unlock()
 
 	return image, err
@@ -533,7 +576,7 @@ func checkAndSetUserMainImage(userRepo user_db.UserRepo, pubsubClient shrd_servi
 	var err1 error
 	var err2 error
 
-	err := shrd_utils.ExecTx(ctx, userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := userRepo.WithTx(tx)
 		userImages, err := uTx.FindUserImagesByUserIdForUpdate(ctx, userId)
 		if err != nil {
@@ -577,7 +620,7 @@ func checkAndSetUserMainImage(userRepo user_db.UserRepo, pubsubClient shrd_servi
 		if err := ewg.Wait(); err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, failedWhenUploadingFile, 422)
 		} else if mainImageUrl != "" {
-			log.Println("success set user main image", mainImageUrl)
+			shrd_utils.LogInfo(fmt.Sprintf("success set user main image: %s", mainImageUrl))
 			updatedUser.MainImagePath = mainImagePath
 			updatedUser.MainImageUrl = mainImageUrl
 		}
@@ -593,10 +636,13 @@ func checkAndSetUserMainImage(userRepo user_db.UserRepo, pubsubClient shrd_servi
 }
 
 func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileHeader, userId uuid.UUID) []response.UserImageResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.UploadImages")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userImagesResp := make([]response.UserImageResp, len(files))
 	images := make([]user_db.UserImage, len(files))
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		ewg := errgroup.Group{}
 		mu := sync.Mutex{}
@@ -616,7 +662,7 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 
 			ewg.Go(func() error {
 				image, err := uploadImagesHelper(
-					ctx,
+					svcCtx,
 					&mu,
 					s.fileSvc,
 					uTx,
@@ -657,11 +703,16 @@ func (s *UserSvcImpl) UploadImages(ctx context.Context, files []*multipart.FileH
 }
 
 func (s *UserSvcImpl) GetUserImages(ctx context.Context, userId uuid.UUID) []response.UserImageResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.GetUserImages")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	ewg := errgroup.Group{}
 	userImagesResp := []response.UserImageResp{}
 
 	data, err := s.cacheSvc.GetOrSet(ctx, shrd_utils.BuildCacheKey(utils.USER_KEY, userId.String(), "GetUserImages"), func() any {
-		userImages, err := s.userRepo.FindUserImagesByUserId(ctx, userId)
+		fuiCtx, fuiTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserImagesByUserId")
+		userImages, err := s.userRepo.FindUserImagesByUserId(fuiCtx, userId)
+		shrd_utils.CheckTracer(fuiTrc, err)
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "failed when finding user images", 400)
 		}
@@ -670,7 +721,9 @@ func (s *UserSvcImpl) GetUserImages(ctx context.Context, userId uuid.UUID) []res
 		for i := range userImages {
 			index := i
 			ewg.Go(func() error {
-				preSignedUrl, err := s.fileSvc.GetPreSignUrl(ctx, userImages[index].ImagePath)
+				psCtx, psTrc := shrd_utils.CreateTracer(svcCtx, "GetPreSignUrl")
+				preSignedUrl, err := s.fileSvc.GetPreSignUrl(psCtx, userImages[index].ImagePath)
+				shrd_utils.CheckTracer(psTrc, err)
 				if err != nil {
 					return err
 				}
@@ -720,10 +773,12 @@ func setMainImageHelper(
 	newMainImageUrl string,
 	newMainImagePath string,
 ) (user_db.User, user_db.UserImage, error) {
-	image, err := uTx.UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+	uuiCtx, uuiTrc := shrd_utils.CreateTracer(ctx, "repo.UpdateUserImage")
+	image, err := uTx.UpdateUserImage(uuiCtx, user_db.UpdateUserImageParams{
 		ID:     imageId,
 		IsMain: true,
 	})
+	shrd_utils.CheckTracer(uuiTrc, err)
 	if err != nil {
 		return user_db.User{}, user_db.UserImage{}, err
 	}
@@ -736,21 +791,29 @@ func setMainImageHelper(
 		MainImagePath: newMainImagePath,
 	}
 
-	user, err := uTx.UpdateUserMainImage(ctx, userParams)
+	uumiCtx, uumiTrc := shrd_utils.CreateTracer(ctx, "repo.UpdateUserMainImage")
+	user, err := uTx.UpdateUserMainImage(uumiCtx, userParams)
+	shrd_utils.CheckTracer(uumiTrc, err)
+
 	return user, image, err
 }
 
 func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageId uuid.UUID) response.UserImageResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.SetMainImage")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	userImageResp := response.UserImageResp{}
 	var updatedUser user_db.User
 	var updatedUserImage user_db.UserImage
 	var err1 error
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
 		ewg := errgroup.Group{}
-		userImages, err := uTx.FindUserImagesByUserIdForUpdate(ctx, userId)
+		fuiCtx, fuiTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserImagesByUserIdForUpdate")
+		userImages, err := uTx.FindUserImagesByUserIdForUpdate(fuiCtx, userId)
+		shrd_utils.CheckTracer(fuiTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
@@ -779,7 +842,7 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 
 		ewg.Go(func() error {
 			updatedUser, updatedUserImage, err1 = setMainImageHelper(
-				ctx,
+				svcCtx,
 				uTx,
 				&userImageResp,
 				userId,
@@ -791,10 +854,12 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 		})
 
 		ewg.Go(func() error {
-			_, err = uTx.UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+			uuiCtx, uuiTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUserImage")
+			_, err = uTx.UpdateUserImage(uuiCtx, user_db.UpdateUserImageParams{
 				ID:     oldMainImageId,
 				IsMain: false,
 			})
+			shrd_utils.CheckTracer(uuiTrc, err)
 			return err
 		})
 
@@ -836,12 +901,16 @@ func (s *UserSvcImpl) SetMainImage(ctx context.Context, userId uuid.UUID, imageI
 }
 
 func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId uuid.UUID) {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.DeleteImage")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
 	var imageID uuid.UUID
 
-	err := shrd_utils.ExecTx(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
+	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 		ewg := errgroup.Group{}
-		image, err := uTx.FindUserImageById(ctx, imageId)
+		fuiCtx, fuiTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserImageById")
+		image, err := uTx.FindUserImageById(fuiCtx, imageId)
+		shrd_utils.CheckTracer(fuiTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, "image not found", 404)
@@ -856,11 +925,17 @@ func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId
 		}
 
 		ewg.Go(func() error {
-			return s.fileSvc.DeleteFile(ctx, s.config.S3PrivateBucketName, image.ImagePath)
+			dfCtx, dfTrc := shrd_utils.CreateTracer(svcCtx, "DeleteFile")
+			err := s.fileSvc.DeleteFile(dfCtx, s.config.S3PrivateBucketName, image.ImagePath)
+			shrd_utils.CheckTracer(dfTrc, err)
+			return err
 		})
 
 		ewg.Go(func() error {
-			return uTx.DeleteUserImage(ctx, image.ID)
+			duiCtx, duiTrc := shrd_utils.CreateTracer(svcCtx, "DeleteFile")
+			err := uTx.DeleteUserImage(duiCtx, image.ID)
+			shrd_utils.CheckTracer(duiTrc, err)
+			return err
 		})
 
 		if err := ewg.Wait(); err != nil {
@@ -888,6 +963,9 @@ func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId
 }
 
 func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq) response.UsersWithPaginationResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.GetUsers")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	ewg1 := errgroup.Group{}
 	ewg2 := errgroup.Group{}
 	users := []user_db.User{}
@@ -907,16 +985,20 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 
 	data, err := s.cacheSvc.GetOrSet(ctx, shrd_utils.BuildCacheKey(utils.USERS_KEY, "|", "GetUsers", params), func() any {
 		ewg1.Go(func() error {
-			users, err1 = s.userRepo.FindUsers(ctx, params)
+			fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUsers")
+			users, err1 = s.userRepo.FindUsers(fuCtx, params)
+			shrd_utils.CheckTracer(fuTrc, err1)
 			return err1
 		})
 
 		ewg1.Go(func() error {
-			counts, err2 = s.userRepo.GetUsersPaginationCount(ctx, user_db.GetUsersPaginationCountParams{
+			gupCtx, gupTrc := shrd_utils.CreateTracer(svcCtx, "repo.GetUsersPaginationCount")
+			counts, err2 = s.userRepo.GetUsersPaginationCount(gupCtx, user_db.GetUsersPaginationCountParams{
 				SearchValue: "%" + input.SearchValue + "%",
 				SearchField: input.SearchField,
 				FilterBy:    input.FilterBy,
 			})
+			shrd_utils.CheckTracer(gupTrc, err2)
 			return err2
 		})
 
@@ -930,7 +1012,9 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 
 			ewg2.Go(func() error {
 				if users[index].MainImagePath != "" {
-					preSignedUrl, err := s.fileSvc.GetPreSignUrl(ctx, users[index].MainImagePath)
+					psCtx, psTrc := shrd_utils.CreateTracer(svcCtx, "GetPreSignUrl")
+					preSignedUrl, err := s.fileSvc.GetPreSignUrl(psCtx, users[index].MainImagePath)
+					shrd_utils.CheckTracer(psTrc, err)
 					if err != nil {
 						return err
 					}
@@ -983,11 +1067,17 @@ func getUserHelper(
 }
 
 func (s *UserSvcImpl) GetUser(ctx context.Context, userId uuid.UUID) response.UserWithImagesResp {
+	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.GetUser")
+	defer shrd_utils.CheckTracerSvc(svcTrc)
+
 	ewg := errgroup.Group{}
 	userWithImagesResp := response.UserWithImagesResp{}
 	data, err := s.cacheSvc.GetOrSet(ctx, shrd_utils.BuildCacheKey(utils.USER_KEY, userId.String(), "GetUser"), func() any {
-		user, err := s.userRepo.FindUserWithImages(ctx, userId)
+		dbCtx, dbTrc := shrd_utils.CreateTracer(svcCtx, "repo.GetUser")
+		user, err := s.userRepo.FindUserWithImages(dbCtx, userId)
+		shrd_utils.CheckTracer(dbTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
+
 		if err != nil {
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
 		}
@@ -999,13 +1089,16 @@ func (s *UserSvcImpl) GetUser(ctx context.Context, userId uuid.UUID) response.Us
 			path := userWithImagesResp.Images[index].ImagePath
 
 			ewg.Go(func() error {
-				return getUserHelper(
-					ctx,
+				psCtx, psTrc := shrd_utils.CreateTracer(svcCtx, "GetPreSignedUrl")
+				err := getUserHelper(
+					psCtx,
 					s.fileSvc,
 					userWithImagesResp,
 					index,
 					path,
 				)
+				shrd_utils.CheckTracer(psTrc, err)
+				return err
 			})
 		}
 

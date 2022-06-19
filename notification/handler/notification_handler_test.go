@@ -10,7 +10,7 @@ import (
 	shrd_helper "github.com/StevanoZ/dv-shared/helper"
 	shrd_middleware "github.com/StevanoZ/dv-shared/middleware"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
