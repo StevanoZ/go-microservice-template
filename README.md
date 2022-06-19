@@ -61,6 +61,11 @@ https://user-images.githubusercontent.com/51188834/172746947-216ed378-a6d0-4fac-
 
 
 
+**Peformance Tracing**
+<img width="1324" alt="sample-tracing" src="https://user-images.githubusercontent.com/51188834/174494929-9dcf3d13-fcc4-4cad-8ea2-a3ed94d0ecfe.png">
+
+
+
 ## Tech Related
 
 **Clean Architecture**. <br />
@@ -75,6 +80,7 @@ https://user-images.githubusercontent.com/51188834/172746947-216ed378-a6d0-4fac-
 **Golang Migrate**. For database migration. <br />
 **GolangCI Lint**. For linter. <br />
 **Sonar Cloud**. For code quality. <br />
+**Datadog APM Tracer**. For peformance tracing. <br />
 **Testify/GoMock**. For testing library. <br />
 **Code Coverage**. CodeCov (threshold >= 90%). <br />
 **Commitizen**. For commit controll. <br />
