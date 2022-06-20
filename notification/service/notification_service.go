@@ -41,6 +41,10 @@ const (
 
 const startedListening = "started listening topic: "
 
+func logTopicName(topic string) {
+	shrd_utils.LogInfo(fmt.Sprintf("%s, %s", startedListening, topic))
+}
+
 type NotificationSvc interface {
 	ListenForEmailTopic(ctx context.Context) error
 	ListenForUserTopic(ctx context.Context) error
@@ -74,7 +78,7 @@ func (s *NotificationSvcImpl) ListenForEmailTopic(ctx context.Context) error {
 		return err
 	}
 
-	shrd_utils.LogInfo(fmt.Sprintf("%s, %s", startedListening, message.EMAIL_TOPIC))
+	logTopicName(message.EMAIL_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.EMAIL_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		switch msg.OrderingKey {
 		case message.SEND_OTP_KEY:
@@ -142,7 +146,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 		return err
 	}
 
-	shrd_utils.LogInfo(fmt.Sprintf("%s, %s", startedListening, message.USER_TOPIC))
+	logTopicName(message.USER_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.USER_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		err := shrd_utils.ExecTx(ctx, s.repository.GetDB(), func(tx *sql.Tx) error {
 			repoTx := s.repository.WithTx(tx)
@@ -361,7 +365,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 		return err
 	}
 
-	shrd_utils.LogInfo(fmt.Sprintf("%s, %s", startedListening, message.USER_IMAGE_TOPIC))
+	logTopicName(message.USER_IMAGE_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.USER_IMAGE_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		err := shrd_utils.ExecTx(ctx, s.repository.GetDB(), func(tx *sql.Tx) error {
 			repoTx := s.repository.WithTx(tx)
