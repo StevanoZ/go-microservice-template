@@ -35,6 +35,9 @@ jobs:
           excludeTitle: 'true'
           checkAllCommitMessages: 'true'
           accessToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: log events
+        run:  echo "${{ github.context.payload.pull_request }}"
+
       - name: Enforce Pull Request Description Length
         uses: ryanvade/enforce-pr-description-length-action@v1
         with:

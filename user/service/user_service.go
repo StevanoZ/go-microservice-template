@@ -33,6 +33,8 @@ const (
 	failedWhenUpdatingUser      = "failed when updating user"
 	failedWhenUploadingFile     = "failed when uploading file"
 	failedWhenGettingPresignUrl = "failed when getting pre signed url"
+	repoFindUserByEmail         = "repo.FindUserByEmail"
+	repoUpdateUser              = "repo.UpdateUser"
 )
 
 type UserSvc interface {
@@ -85,7 +87,7 @@ func (s *UserSvcImpl) SignUp(ctx context.Context, input request.SignUpReq) respo
 	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
-		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, repoFindUserByEmail)
 		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
 		shrd_utils.CheckTracer(fuTrc, err)
 		if err != nil && err != sql.ErrNoRows {
@@ -163,7 +165,7 @@ func (s *UserSvcImpl) LogIn(ctx context.Context, input request.LogInReq) respons
 		var err2 error
 
 		uTx := s.userRepo.WithTx(tx)
-		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, repoFindUserByEmail)
 		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
 		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
@@ -236,7 +238,7 @@ func (s *UserSvcImpl) UpdateUser(ctx context.Context, userId uuid.UUID, input re
 			return shrd_utils.CustomErrorWithTrace(err, userNotFound, 404)
 		}
 
-		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, repoUpdateUser)
 		user, err = uTx.UpdateUser(uuCtx, user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    input.Username,
@@ -314,7 +316,7 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
 
-		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, repoFindUserByEmail)
 		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
 		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
@@ -330,7 +332,7 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		if user.OtpCode != int64(otpCode) {
 			params := mapping.ToUpdateUserParams(user)
 			params.AttemptLeft = user.AttemptLeft - 1
-			uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+			uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, repoUpdateUser)
 			updtdUser, err := s.userRepo.UpdateUser(uuCtx, params)
 			shrd_utils.CheckTracer(uuTrc, err)
 			if err != nil {
@@ -359,7 +361,7 @@ func (s *UserSvcImpl) VerifyOtp(ctx context.Context, input request.VerifyOtpReq)
 		params.AttemptLeft = 0
 		params.Status = active
 
-		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, "repo.UpdateUser")
+		uuCtx, uuTrc := shrd_utils.CreateTracer(svcCtx, repoUpdateUser)
 		user, err = uTx.UpdateUser(uuCtx, params)
 		shrd_utils.CheckTracer(uuTrc, err)
 		if err != nil {
@@ -415,7 +417,7 @@ func (s *UserSvcImpl) ResendOtp(ctx context.Context, input request.ResendOtpReq)
 
 	err := shrd_utils.ExecTxWithRetry(ctx, s.userRepo.GetDB(), func(tx *sql.Tx) error {
 		uTx := s.userRepo.WithTx(tx)
-		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, "repo.FindUserByEmail")
+		fuCtx, fuTrc := shrd_utils.CreateTracer(svcCtx, repoFindUserByEmail)
 		user, err := uTx.FindUserByEmail(fuCtx, input.Email)
 		shrd_utils.CheckTracer(fuTrc, err)
 		// possible replace --> err != nil && err == sql.ErrNoRows
