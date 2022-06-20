@@ -2,7 +2,7 @@ package main
 
 import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 )
 
 func main() {

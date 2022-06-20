@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 
 	"cloud.google.com/go/pubsub"
@@ -13,6 +12,7 @@ import (
 	"github.com/StevanoZ/dv-shared/message"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -40,6 +40,10 @@ const (
 )
 
 const startedListening = "started listening topic: "
+
+func logTopicName(topic string) {
+	shrd_utils.LogInfo(fmt.Sprintf("%s, %s", startedListening, topic))
+}
 
 type NotificationSvc interface {
 	ListenForEmailTopic(ctx context.Context) error
@@ -74,15 +78,16 @@ func (s *NotificationSvcImpl) ListenForEmailTopic(ctx context.Context) error {
 		return err
 	}
 
-	log.Println(startedListening, message.EMAIL_TOPIC)
+	logTopicName(message.EMAIL_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.EMAIL_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		switch msg.OrderingKey {
 		case message.SEND_OTP_KEY:
 			var payload message.OtpPayload
-			log.Println("unmarshall message [OtpPayload]")
+
+			shrd_utils.LogInfo("unmarshall message [OtpPayload]")
 			err := json.Unmarshal(msg.Data, &payload)
 			if err != nil {
-				log.Println("failed when unmarshall message [OtpPayload]")
+				shrd_utils.LogError("failed when unmarshall message [OtpPayload]", zap.Error(err))
 				message.SetRetryOrSetDataToDB(s.config, msg, func() {
 					params := querier.CreateErrorMessageParams{
 						ServiceName: s.config.ServiceName,
@@ -99,14 +104,14 @@ func (s *NotificationSvcImpl) ListenForEmailTopic(ctx context.Context) error {
 				return
 			}
 
-			log.Println("send otp code to email: ", payload.Email)
+			shrd_utils.LogInfo(fmt.Sprintf("send otp code to email: %s", payload.Email))
 			err = s.emailSvc.SendVerifyOtp(ctx, message.OtpPayload{
 				Email:   payload.Email,
 				OtpCode: payload.OtpCode,
 			})
 
 			if err != nil {
-				log.Println("failed when sending email to user")
+				shrd_utils.LogError("failed when sending email to user", zap.Error(err))
 				message.SetRetryOrSetDataToDB(s.config, msg, func() {
 					params := querier.CreateErrorMessageParams{
 						ServiceName: s.config.ServiceName,
@@ -124,11 +129,11 @@ func (s *NotificationSvcImpl) ListenForEmailTopic(ctx context.Context) error {
 			}
 
 			msg.Ack()
-			log.Println("success send email to user from payload [OtpPayload]")
+			shrd_utils.LogInfo("success send email to user from payload [OtpPayload]")
 			return
 
 		default:
-			log.Println("no key matches for topic [Email]")
+			shrd_utils.LogInfo("no key matches for topic [Email]")
 			// FOR SAFETY USECASE, JUST ACKNOWLEDGED THE MESSAGE
 			msg.Ack()
 		}
@@ -141,7 +146,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 		return err
 	}
 
-	log.Println(startedListening, message.USER_TOPIC)
+	logTopicName(message.USER_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.USER_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		err := shrd_utils.ExecTx(ctx, s.repository.GetDB(), func(tx *sql.Tx) error {
 			repoTx := s.repository.WithTx(tx)
@@ -150,10 +155,10 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 			case message.CREATED_KEY:
 				var payload message.CreatedUserPayload
 
-				log.Println("unmarshall message [CreatedUserPayload]")
+				shrd_utils.LogInfo("unmarshall message [CreatedUserPayload]")
 				err := json.Unmarshal(msg.Data, &payload)
 				if err != nil {
-					log.Println("failed when unmarshall message [CreatedUserPayload]")
+					shrd_utils.LogError("failed when unmarshall message [CreatedUserPayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -179,7 +184,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 					UpdatedAt: payload.UpdatedAt,
 				})
 				if err != nil {
-					log.Println("failed when creating user")
+					shrd_utils.LogError("failed when creating user", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -197,16 +202,16 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 				}
 
 				msg.Ack()
-				log.Println("success created user from payload [CreatedUserPayload]")
+				shrd_utils.LogInfo("success created user from payload [CreatedUserPayload]")
 				return nil
 
 			case message.UPDATED_KEY:
 				var payload message.UpdatedUserPayload
 
-				log.Println("unmarshall message [UpdatedUserPayload]")
+				shrd_utils.LogInfo("unmarshall message [UpdatedUserPayload]")
 				err := json.Unmarshal(msg.Data, &payload)
 				if err != nil {
-					log.Println("failed when unmarshall message [UpdatedUserPayload]")
+					shrd_utils.LogError("failed when unmarshall message [UpdatedUserPayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -224,7 +229,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 				}
 				_, err = repoTx.FindUserByIdForUpdate(ctx, payload.ID)
 				if err != nil {
-					log.Println(failedUserNotFound)
+					shrd_utils.LogError(failedUserNotFound)
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -252,7 +257,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 					UpdatedAt:   payload.UpdatedAt,
 				})
 				if err != nil {
-					log.Println("failed when updating user")
+					shrd_utils.LogError("failed when updating user", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -270,16 +275,17 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 				}
 
 				msg.Ack()
-				log.Println("success updated user from payload [UpdatedUserPayload]")
+				shrd_utils.LogInfo("success updated user from payload [UpdatedUserPayload]")
+
 				return nil
 
 			case message.UPDATED_USER_MAIN_IMAGE_KEY:
 				var payload message.UpdatedUserMainImagePayload
 
-				log.Println("unmarshall message [UpdatedUserMainImagePayload]")
+				shrd_utils.LogInfo("unmarshall message [UpdatedUserMainImagePayload]")
 				err := json.Unmarshal(msg.Data, &payload)
 				if err != nil {
-					log.Println("failed when unmarshall message [UpdatedUserMainImagePayload]")
+					shrd_utils.LogError("failed when unmarshall message [UpdatedUserMainImagePayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -298,7 +304,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 
 				_, err = repoTx.FindUserByIdForUpdate(ctx, payload.ID)
 				if err != nil {
-					log.Println(failedUserNotFound)
+					shrd_utils.LogError(failedUserNotFound)
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -321,7 +327,7 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 					UpdatedAt:     payload.UpdatedAt,
 				})
 				if err != nil {
-					log.Println("failed when updating user main image")
+					shrd_utils.LogError("failed when updating user main image", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -339,11 +345,11 @@ func (s *NotificationSvcImpl) ListenForUserTopic(ctx context.Context) error {
 				}
 
 				msg.Ack()
-				log.Println("success updated user from payload [UpdatedUserMainImagePayload]")
+				shrd_utils.LogInfo("success updated user from payload [UpdatedUserMainImagePayload]")
 				return nil
 
 			default:
-				log.Println("no key matches for topic [User]")
+				shrd_utils.LogInfo("no key matches for topic [User]")
 				// FOR SAFETY USECASE, JUST ACKNOWLEDGED THE MESSAGE
 				msg.Ack()
 				return nil
@@ -359,7 +365,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 		return err
 	}
 
-	log.Println(startedListening, message.USER_IMAGE_TOPIC)
+	logTopicName(message.USER_IMAGE_TOPIC)
 	return s.pubSubClient.PullMessages(ctx, fmt.Sprintf("%s_%s", s.config.ServiceName, message.USER_IMAGE_TOPIC), topic, func(ctx context.Context, msg *pubsub.Message) {
 		err := shrd_utils.ExecTx(ctx, s.repository.GetDB(), func(tx *sql.Tx) error {
 			repoTx := s.repository.WithTx(tx)
@@ -368,10 +374,10 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 			case message.CREATED_KEY:
 				var payloads []message.CreatedUserImagePayload
 
-				log.Println("unmarshall message [CreatedUserImagePayload]")
+				shrd_utils.LogInfo("unmarshall message [CreatedUserImagePayload]")
 				err := json.Unmarshal(msg.Data, &payloads)
 				if err != nil {
-					log.Println("failed when unmarshall message [CreatedUserImagePayload]")
+					shrd_utils.LogError("failed when unmarshall message [CreatedUserImagePayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -410,7 +416,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				}
 
 				if err := ewg.Wait(); err != nil {
-					log.Println("failed when creating user image")
+					shrd_utils.LogError("failed when creating user image", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -428,16 +434,16 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				}
 
 				msg.Ack()
-				log.Println("success created user image from payload [CreatedUserImagePayload]")
+				shrd_utils.LogInfo("success created user image from payload [CreatedUserImagePayload]")
 				return nil
 
 			case message.UPDATED_KEY:
 				var payload message.UpdatedUserImagePayload
 
-				log.Println("unmarshall message [UpdatedUserImagePayload]")
+				shrd_utils.LogInfo("unmarshall message [UpdatedUserImagePayload]")
 				err := json.Unmarshal(msg.Data, &payload)
 				if err != nil {
-					log.Println("failed when unmarshall message [UpdatedUserImagePayload]")
+					shrd_utils.LogError("unmarshall message [UpdatedUserImagePayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -456,7 +462,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 
 				_, err = repoTx.FindUserImageByIdForUpdate(ctx, payload.ID)
 				if err != nil {
-					log.Println(failedUserImageNotFound)
+					shrd_utils.LogInfo(failedUserImageNotFound)
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -475,7 +481,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 
 				oldMainImage, err := repoTx.FindUserMainImageByUserIdForUpdate(ctx, payload.UserID)
 				if err != nil {
-					log.Println("cant't update, user old main image not found")
+					shrd_utils.LogError("cant't update, user old main image not found")
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -513,7 +519,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				})
 
 				if err := ewg.Wait(); err != nil {
-					log.Println("failed when updating user image")
+					shrd_utils.LogError("failed when updating user image", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -531,16 +537,15 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				}
 
 				msg.Ack()
-				log.Println("success updated user image from payload [UpdatedUserImagePayload]")
+				shrd_utils.LogInfo("success updated user image from payload [UpdatedUserImagePayload]")
 				return nil
 
 			case message.DELETED_KEY:
 				var payload message.DeletedUserImagePayload
-
-				log.Println("unmarshall message [DeletedUserImagePayload]")
+				shrd_utils.LogInfo("unmarshall message [DeletedUserImagePayload]")
 				err := json.Unmarshal(msg.Data, &payload)
 				if err != nil {
-					log.Println("failed when unmarshall message [DeletedUserImagePayload]")
+					shrd_utils.LogError("failed when unmarshall message [DeletedUserImagePayload]", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -559,7 +564,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 
 				_, err = repoTx.FindUserImageByIdForUpdate(ctx, payload.ID)
 				if err != nil {
-					log.Println(failedUserImageNotFound)
+					shrd_utils.LogError(failedUserImageNotFound)
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -578,7 +583,7 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 
 				err = repoTx.DeleteUserImage(ctx, payload.ID)
 				if err != nil {
-					log.Println("failed when deleting user image")
+					shrd_utils.LogError("failed when deleting user image", zap.Error(err))
 					message.SetRetryOrSetDataToDB(s.config, msg, func() {
 						params := querier.CreateErrorMessageParams{
 							ServiceName: s.config.ServiceName,
@@ -596,11 +601,11 @@ func (s *NotificationSvcImpl) ListenForUserImageTopic(ctx context.Context) error
 				}
 
 				msg.Ack()
-				log.Println("success deleted user image from payload [DeletedUserImagePayload]")
+				shrd_utils.LogInfo("success deleted user image from payload [DeletedUserImagePayload]")
 				return nil
 
 			default:
-				log.Println("no key matches for topic [User-Image]")
+				shrd_utils.LogInfo("no key matches for topic [User-Image]")
 				// FOR SAFETY USECASE, JUST ACKNOWLEDGED THE MESSAGE
 				msg.Ack()
 				return nil

@@ -6,7 +6,7 @@ import (
 
 	"github.com/StevanoZ/dv-notification/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/go-openapi/runtime/middleware"
 )
 

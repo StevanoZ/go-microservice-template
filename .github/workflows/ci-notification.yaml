@@ -35,6 +35,10 @@ jobs:
           excludeTitle: 'true'
           checkAllCommitMessages: 'true'
           accessToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enforce Pull Request Description Length
+        uses: ryanvade/enforce-pr-description-length-action@v1
+        with:
+          minLength: 5
 
   lint:
     name: Run Lint

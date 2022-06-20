@@ -265,8 +265,8 @@ func TestSignUp(t *testing.T) {
 		user := createUser()
 		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
-		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, nil).Times(1)
+		userRepo.EXPECT().CreateUser(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserParams) (user_db.User, error) {
 				assert.NotEqual(t, PASSWORD, params.Password)
 				assert.Equal(t, USERNAME, params.Username)
@@ -293,7 +293,7 @@ func TestSignUp(t *testing.T) {
 	t.Run("Sql error (status code 422)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("|%s", UNPROCESSABLE_ENTITY),
@@ -310,7 +310,7 @@ func TestSignUp(t *testing.T) {
 	t.Run("Email already in used (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(createUser(), nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(createUser(), nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|email already in used",
@@ -326,8 +326,8 @@ func TestSignUp(t *testing.T) {
 	t.Run("Failed when creating user (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, nil).Times(1)
-		userRepo.EXPECT().CreateUser(ctx, gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, nil).Times(1)
+		userRepo.EXPECT().CreateUser(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserParams{})).
 			Return(user_db.User{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
 		// SHOULD NOT CALL THIS
@@ -376,8 +376,8 @@ func TestLogIn(t *testing.T) {
 	t.Run("Success Request", func(t *testing.T) {
 		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return(preSignedUrl, nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(userDbActive, nil).Times(1)
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), imagePath).Return(preSignedUrl, nil).Times(1)
 
 		assert.NotPanics(t, func() {
 			resp := userSvc.LogIn(ctx, request.LogInReq{Email: EMAIL, Password: PASSWORD})
@@ -390,7 +390,7 @@ func TestLogIn(t *testing.T) {
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|user not found", sql.ErrNoRows),
@@ -402,7 +402,7 @@ func TestLogIn(t *testing.T) {
 
 	t.Run("Invalid request status = not-active (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{Status: "not-active"}, nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{Status: "not-active"}, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|please verify your email first",
@@ -415,7 +415,7 @@ func TestLogIn(t *testing.T) {
 	t.Run("Invalid credential (status code 401)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			Password: PASSWORD,
 			Status:   "active",
 			Email:    EMAIL,
@@ -433,7 +433,7 @@ func TestLogIn(t *testing.T) {
 	t.Run("Not call get pre sign URL when user main image path is empty", func(t *testing.T) {
 		setupAndMockCommitTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			ID:            USER_ID,
 			Status:        "active",
 			Password:      hashedPassword,
@@ -451,8 +451,8 @@ func TestLogIn(t *testing.T) {
 	t.Run("Failed when getting pre sign URL", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(userDbActive, nil).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, imagePath).Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(userDbActive, nil).Times(1)
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), imagePath).Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			StatusCode: 422,
@@ -481,9 +481,9 @@ func TestVerifyOtp(t *testing.T) {
 
 		user := createUser()
 		user.OtpCode = int64(parsedOtpCode)
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUser(ctx, user_db.UpdateUserParams{
+		userRepo.EXPECT().UpdateUser(gomock.Any(), user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    USERNAME,
 			Password:    PASSWORD,
@@ -520,7 +520,7 @@ func TestVerifyOtp(t *testing.T) {
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, sql.ErrNoRows).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|user not found", sql.ErrNoRows),
@@ -533,7 +533,7 @@ func TestVerifyOtp(t *testing.T) {
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			Status: "active",
 		}, nil).Times(1)
 
@@ -548,7 +548,7 @@ func TestVerifyOtp(t *testing.T) {
 	t.Run("Invalid request attempt left = 0 (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			AttemptLeft: 0,
 		}, nil).Times(1)
 
@@ -563,7 +563,7 @@ func TestVerifyOtp(t *testing.T) {
 	t.Run("Expired otp code (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			AttemptLeft: 5,
 			UpdatedAt:   time.Now().Add(-5 * time.Minute),
 		}, nil).Times(1)
@@ -583,8 +583,8 @@ func TestVerifyOtp(t *testing.T) {
 		user := createUser()
 		user.OtpCode = int64(invalidOtpCode)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, user_db.UpdateUserParams{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).Times(1)
+		userRepo.EXPECT().UpdateUser(gomock.Any(), user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    USERNAME,
 			Password:    PASSWORD,
@@ -624,7 +624,7 @@ func TestVerifyOtp(t *testing.T) {
 
 		user := createUser()
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    strconvErr,
@@ -640,8 +640,8 @@ func TestVerifyOtp(t *testing.T) {
 		user := createUser()
 		user.OtpCode = int64(invalidOtpCode)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, user_db.UpdateUserParams{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).Times(1)
+		userRepo.EXPECT().UpdateUser(gomock.Any(), user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    USERNAME,
 			Password:    PASSWORD,
@@ -672,9 +672,9 @@ func TestVerifyOtp(t *testing.T) {
 		user := createUser()
 		user.OtpCode = int64(parsedOtpCode)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).Times(1)
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUser(ctx, user_db.UpdateUserParams{
+		userRepo.EXPECT().UpdateUser(gomock.Any(), user_db.UpdateUserParams{
 			ID:          user.ID,
 			Username:    USERNAME,
 			Password:    PASSWORD,
@@ -712,9 +712,9 @@ func TestResendOtp(t *testing.T) {
 		user := createUser()
 		user.Email = EMAIL
 		var newOtpCode int64
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).
 			Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
+		userRepo.EXPECT().UpdateUser(gomock.Any(), gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.UpdateUserParams) (user_db.User, error) {
 				newOtpCode = params.OtpCode
 				user.OtpCode = newOtpCode
@@ -736,7 +736,7 @@ func TestResendOtp(t *testing.T) {
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{}, errors.New(NOT_FOUND)).
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{}, errors.New(NOT_FOUND)).
 			Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -750,7 +750,7 @@ func TestResendOtp(t *testing.T) {
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			Status: "active",
 		}, nil).
 			Times(1)
@@ -766,7 +766,7 @@ func TestResendOtp(t *testing.T) {
 	t.Run("Invalid request status = active (status code 400)", func(t *testing.T) {
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user_db.User{
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user_db.User{
 			AttemptLeft: 0,
 		}, nil).
 			Times(1)
@@ -784,9 +784,9 @@ func TestResendOtp(t *testing.T) {
 
 		user := createUser()
 		user.Email = EMAIL
-		userRepo.EXPECT().FindUserByEmail(ctx, EMAIL).Return(user, nil).
+		userRepo.EXPECT().FindUserByEmail(gomock.Any(), EMAIL).Return(user, nil).
 			Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
+		userRepo.EXPECT().UpdateUser(gomock.Any(), gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.UpdateUserParams) (user_db.User, error) {
 				assert.NotEqual(t, user.OtpCode, params.OtpCode)
 				assert.Equal(t, user.AttemptLeft-1, params.AttemptLeft)
@@ -830,8 +830,8 @@ func TestUpdateUser(t *testing.T) {
 		user := createUser()
 		user.ID = userId
 
-		userRepo.EXPECT().FindUserById(ctx, userId).Return(user, nil).Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
+		userRepo.EXPECT().FindUserById(gomock.Any(), userId).Return(user, nil).Times(1)
+		userRepo.EXPECT().UpdateUser(gomock.Any(), gomock.AssignableToTypeOf(user_db.UpdateUserParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.UpdateUserParams) (user_db.User, error) {
 				updatedUsername := params.Username
 				updatedPhoneNumber := params.PhoneNumber
@@ -873,7 +873,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserById(ctx, userId).Return(user_db.User{}, errors.New(NOT_FOUND)).Times(1)
+		userRepo.EXPECT().FindUserById(gomock.Any(), userId).Return(user_db.User{}, errors.New(NOT_FOUND)).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|user not found", NOT_FOUND),
@@ -894,8 +894,8 @@ func TestUpdateUser(t *testing.T) {
 		user := createUser()
 		user.ID = userId
 
-		userRepo.EXPECT().FindUserById(ctx, userId).Return(user, nil).Times(1)
-		userRepo.EXPECT().UpdateUser(ctx, user_db.UpdateUserParams{
+		userRepo.EXPECT().FindUserById(gomock.Any(), userId).Return(user, nil).Times(1)
+		userRepo.EXPECT().UpdateUser(gomock.Any(), user_db.UpdateUserParams{
 			ID:          userId,
 			Username:    input.Username,
 			PhoneNumber: input.PhoneNumber,
@@ -935,7 +935,7 @@ func TestUploadImages(t *testing.T) {
 		user := createUser()
 		user.ID = userId
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			DoAndReturn(func(_ interface{}, _ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, "users", pathSlice[0])
@@ -943,7 +943,7 @@ func TestUploadImages(t *testing.T) {
 				return buildUploadUrl(IMAGE_NAME), nil
 			}).Times(3)
 
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserImageParams) (user_db.UserImage, error) {
 				assert.Equal(t, userId, params.UserID)
 				assert.Equal(t, buildUploadUrl(IMAGE_NAME), params.ImageUrl)
@@ -957,7 +957,7 @@ func TestUploadImages(t *testing.T) {
 			}).Times(2)
 
 		mainImageId := uuid.New()
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserImageParams) (user_db.UserImage, error) {
 				assert.Equal(t, userId, params.UserID)
 				assert.Equal(t, buildUploadUrl(IMAGE_NAME), params.ImageUrl)
@@ -1013,7 +1013,7 @@ func TestUploadImages(t *testing.T) {
 		user := createUser()
 		user.ID = userId
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			DoAndReturn(func(_ interface{}, _ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, "users", pathSlice[0])
@@ -1021,7 +1021,7 @@ func TestUploadImages(t *testing.T) {
 				return buildUploadUrl(IMAGE_NAME), nil
 			}).Times(3)
 
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			DoAndReturn(func(_ interface{}, params user_db.CreateUserImageParams) (user_db.UserImage, error) {
 				assert.Equal(t, userId, params.UserID)
 				assert.Equal(t, buildUploadUrl(IMAGE_NAME), params.ImageUrl)
@@ -1067,7 +1067,7 @@ func TestUploadImages(t *testing.T) {
 
 		filesHeader := shrd_helper.CreateFilesHeader(11, IMAGE_NAME)
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Any(), gomock.Any()).Times(0)
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|can't upload more than 10 files at once",
@@ -1085,7 +1085,7 @@ func TestUploadImages(t *testing.T) {
 			{Filename: TEST_IMAGE_3, Size: 1024},
 		}
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Any(), gomock.Any()).Times(0)
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "open : no such file or directory|failed when uploading file",
@@ -1101,7 +1101,7 @@ func TestUploadImages(t *testing.T) {
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(3)
 
 		// IF ERROR SHOULD NOT CALL THIS
@@ -1125,9 +1125,9 @@ func TestUploadImages(t *testing.T) {
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			Return(buildUploadUrl(IMAGE_NAME), nil).Times(3)
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).Times(3)
 
 		// IF ERROR SHOULD NOT CALL THIS
@@ -1155,9 +1155,9 @@ func TestUploadImages(t *testing.T) {
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			Return(buildUploadUrl(IMAGE_NAME), nil).Times(3)
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			Return(user_db.UserImage{}, nil).Times(3)
 
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
@@ -1185,19 +1185,19 @@ func TestUploadImages(t *testing.T) {
 
 		filesHeader := shrd_helper.CreateFilesHeader(DEFAULT_FILES_LENGTH, IMAGE_NAME)
 
-		fileSvc.EXPECT().UploadPrivateFile(ctx, gomock.Not(nil), gomock.Any()).
+		fileSvc.EXPECT().UploadPrivateFile(gomock.Any(), gomock.Not(nil), gomock.Any()).
 			Return(buildUploadUrl(IMAGE_NAME), nil).Times(3)
-		userRepo.EXPECT().CreateUserImage(ctx, gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
+		userRepo.EXPECT().CreateUserImage(gomock.Any(), gomock.AssignableToTypeOf(user_db.CreateUserImageParams{})).
 			Return(user_db.UserImage{}, nil).Times(3)
 
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 		userImages, _ := createUserWithImages(userId, false)
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).Return(unmarshalUserImages(t, userImages), nil).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).Return(unmarshalUserImages(t, userImages), nil).
 			Times(1)
-		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), gomock.Any()).
 			Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
-		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).
+		userRepo.EXPECT().UpdateUserMainImage(gomock.Any(), gomock.Any()).
 			Return(user_db.User{}, nil).MinTimes(1)
 
 		// SHOULD NOT CALL THIS
@@ -1238,10 +1238,10 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[2]
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return(images, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     newMainImage.ID,
 			IsMain: true,
 		}).DoAndReturn(func(_ interface{}, params user_db.UpdateUserImageParams) (user_db.UserImage, error) {
@@ -1250,12 +1250,12 @@ func TestSetMainImage(t *testing.T) {
 			return newMainImage, nil
 		}).Times(1)
 
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     oldMainImageId,
 			IsMain: false,
 		}).Return(user_db.UserImage{}, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUserMainImage(ctx, user_db.UpdateUserMainImageParams{
+		userRepo.EXPECT().UpdateUserMainImage(gomock.Any(), user_db.UpdateUserMainImageParams{
 			ID:            userId,
 			MainImageUrl:  newMainImage.ImageUrl,
 			MainImagePath: newMainImage.ImagePath,
@@ -1277,12 +1277,12 @@ func TestSetMainImage(t *testing.T) {
 		userId := USER_ID
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return([]user_db.UserImage{}, errors.New(NOT_FOUND)).Times(1)
 
-		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
-		userRepo.EXPECT().UpdateUserImage(ctx, gomock.Any()).Times(0)
-		userRepo.EXPECT().UpdateUserMainImage(ctx, gomock.Any()).Times(0)
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), gomock.Any()).Times(0)
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), gomock.Any()).Times(0)
+		userRepo.EXPECT().UpdateUserMainImage(gomock.Any(), gomock.Any()).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|user not found", NOT_FOUND),
@@ -1297,7 +1297,7 @@ func TestSetMainImage(t *testing.T) {
 		_, mainImageId := createUserWithImages(userId, true)
 		images[0].ID = mainImageId
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return(images, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1312,7 +1312,7 @@ func TestSetMainImage(t *testing.T) {
 		userId := USER_ID
 		setupAndMockRollbackTx(DB, userRepo, sqlMock)
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return(images, nil).Times(1)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1334,18 +1334,18 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[1]
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return(images, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     oldMainImageId,
 			IsMain: false,
 		}).Return(user_db.UserImage{}, nil).MinTimes(1)
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     newMainImage.ID,
 			IsMain: true,
 		}).Return(user_db.UserImage{}, nil).MinTimes(1)
-		userRepo.EXPECT().UpdateUserMainImage(ctx, user_db.UpdateUserMainImageParams{
+		userRepo.EXPECT().UpdateUserMainImage(gomock.Any(), user_db.UpdateUserMainImageParams{
 			ID:            userId,
 			MainImageUrl:  newMainImage.ImageUrl,
 			MainImagePath: newMainImage.ImagePath,
@@ -1376,18 +1376,18 @@ func TestSetMainImage(t *testing.T) {
 		assert.NoError(t, err)
 		newMainImage := images[1]
 
-		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserIdForUpdate(gomock.Any(), userId).
 			Return(images, nil).Times(1)
 
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     oldMainImageId,
 			IsMain: false,
 		}).Return(user_db.UserImage{}, nil).Times(1)
-		userRepo.EXPECT().UpdateUserImage(ctx, user_db.UpdateUserImageParams{
+		userRepo.EXPECT().UpdateUserImage(gomock.Any(), user_db.UpdateUserImageParams{
 			ID:     newMainImage.ID,
 			IsMain: true,
 		}).Return(user_db.UserImage{}, errors.New(UNPROCESSABLE_ENTITY)).Times(1)
-		userRepo.EXPECT().UpdateUserMainImage(ctx, user_db.UpdateUserMainImageParams{
+		userRepo.EXPECT().UpdateUserMainImage(gomock.Any(), user_db.UpdateUserMainImageParams{
 			ID:            userId,
 			MainImageUrl:  newMainImage.ImageUrl,
 			MainImagePath: newMainImage.ImagePath,
@@ -1424,17 +1424,17 @@ func TestDeleteImage(t *testing.T) {
 
 		_, imageId := createUserWithImages(userId, false)
 		path := fmt.Sprintf("users/%s/%s", userId, IMAGE_NAME)
-		userRepo.EXPECT().FindUserImageById(ctx, imageId).Return(user_db.UserImage{
+		userRepo.EXPECT().FindUserImageById(gomock.Any(), imageId).Return(user_db.UserImage{
 			ID:        imageId,
 			UserID:    userId,
 			IsMain:    false,
 			ImagePath: path,
 		}, nil).Times(1)
 
-		fileSvc.EXPECT().DeleteFile(ctx, config.S3PrivateBucketName, path).
+		fileSvc.EXPECT().DeleteFile(gomock.Any(), config.S3PrivateBucketName, path).
 			Return(nil).Times(1)
 
-		userRepo.EXPECT().DeleteUserImage(ctx, imageId).Return(nil).Times(1)
+		userRepo.EXPECT().DeleteUserImage(gomock.Any(), imageId).Return(nil).Times(1)
 
 		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.DELETED_KEY,
 			message.DeletedUserImagePayload{ID: imageId}).Times(1)
@@ -1450,12 +1450,12 @@ func TestDeleteImage(t *testing.T) {
 
 		imageId := uuid.New()
 
-		userRepo.EXPECT().FindUserImageById(ctx, imageId).Return(user_db.UserImage{}, errors.New(NOT_FOUND)).Times(1)
+		userRepo.EXPECT().FindUserImageById(gomock.Any(), imageId).Return(user_db.UserImage{}, errors.New(NOT_FOUND)).Times(1)
 
-		fileSvc.EXPECT().DeleteFile(ctx, gomock.Any(), gomock.Any()).
+		fileSvc.EXPECT().DeleteFile(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil).Times(0)
 
-		userRepo.EXPECT().DeleteUserImage(ctx, gomock.Any()).Return(nil).Times(0)
+		userRepo.EXPECT().DeleteUserImage(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|image not found", NOT_FOUND),
@@ -1471,16 +1471,16 @@ func TestDeleteImage(t *testing.T) {
 
 		_, mainImageId := createUserWithImages(userId, true)
 
-		userRepo.EXPECT().FindUserImageById(ctx, mainImageId).Return(user_db.UserImage{
+		userRepo.EXPECT().FindUserImageById(gomock.Any(), mainImageId).Return(user_db.UserImage{
 			ID:     mainImageId,
 			UserID: userId,
 			IsMain: true,
 		}, nil).Times(1)
 
-		fileSvc.EXPECT().DeleteFile(ctx, gomock.Any(), gomock.Any()).
+		fileSvc.EXPECT().DeleteFile(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil).Times(0)
 
-		userRepo.EXPECT().DeleteUserImage(ctx, gomock.Any()).Return(nil).Times(0)
+		userRepo.EXPECT().DeleteUserImage(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|you can't delete the main image",
@@ -1496,16 +1496,16 @@ func TestDeleteImage(t *testing.T) {
 
 		_, mainImageId := createUserWithImages(userId, true)
 
-		userRepo.EXPECT().FindUserImageById(ctx, mainImageId).Return(user_db.UserImage{
+		userRepo.EXPECT().FindUserImageById(gomock.Any(), mainImageId).Return(user_db.UserImage{
 			ID:     mainImageId,
 			UserID: uuid.New(),
 			IsMain: false,
 		}, nil).Times(1)
 
-		fileSvc.EXPECT().DeleteFile(ctx, gomock.Any(), gomock.Any()).
+		fileSvc.EXPECT().DeleteFile(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil).Times(0)
 
-		userRepo.EXPECT().DeleteUserImage(ctx, gomock.Any()).Return(nil).Times(0)
+		userRepo.EXPECT().DeleteUserImage(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    "|not authorize to perform this operation",
@@ -1521,17 +1521,17 @@ func TestDeleteImage(t *testing.T) {
 
 		_, imageId := createUserWithImages(userId, false)
 		path := fmt.Sprintf("users/%s/%s", userId, IMAGE_NAME)
-		userRepo.EXPECT().FindUserImageById(ctx, imageId).Return(user_db.UserImage{
+		userRepo.EXPECT().FindUserImageById(gomock.Any(), imageId).Return(user_db.UserImage{
 			ID:        imageId,
 			UserID:    userId,
 			IsMain:    false,
 			ImagePath: path,
 		}, nil).Times(1)
 
-		fileSvc.EXPECT().DeleteFile(ctx, config.S3PrivateBucketName, path).
+		fileSvc.EXPECT().DeleteFile(gomock.Any(), config.S3PrivateBucketName, path).
 			Return(errors.New(UNPROCESSABLE_ENTITY)).Times(1)
 
-		userRepo.EXPECT().DeleteUserImage(ctx, imageId).Return(nil).Times(1)
+		userRepo.EXPECT().DeleteUserImage(gomock.Any(), imageId).Return(nil).Times(1)
 
 		// SHOULD NOT CALL THIS
 		pubsubClient.EXPECT().CheckTopicAndPublish(ctx, []string{message.USER_IMAGE_TOPIC}, message.DELETED_KEY,
@@ -1563,13 +1563,13 @@ func TestGetUsers(t *testing.T) {
 
 		getUsersPaginationCountParams := createPaginationCountParams(reqParams.SearchValue)
 
-		userRepo.EXPECT().FindUsers(ctx, findUsersParams).
+		userRepo.EXPECT().FindUsers(gomock.Any(), findUsersParams).
 			Return([]user_db.User{}, errors.New(BAD_REQUEST)).Times(1)
 
-		userRepo.EXPECT().GetUsersPaginationCount(ctx, getUsersPaginationCountParams).
+		userRepo.EXPECT().GetUsersPaginationCount(gomock.Any(), getUsersPaginationCountParams).
 			Return(int64(0), nil).Times(1)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1586,11 +1586,11 @@ func TestGetUsers(t *testing.T) {
 
 		getUsersPaginationCountParams := createPaginationCountParams(reqParams.SearchValue)
 
-		userRepo.EXPECT().FindUsers(ctx, findUsersParams).
+		userRepo.EXPECT().FindUsers(gomock.Any(), findUsersParams).
 			Return(createUsersActive(), nil).Times(1)
-		userRepo.EXPECT().GetUsersPaginationCount(ctx, getUsersPaginationCountParams).
+		userRepo.EXPECT().GetUsersPaginationCount(gomock.Any(), getUsersPaginationCountParams).
 			Return(int64(12), nil).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(10)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1607,13 +1607,13 @@ func TestGetUsers(t *testing.T) {
 
 		getUsersPaginationCountParams := createPaginationCountParams(reqParams.SearchValue)
 
-		userRepo.EXPECT().FindUsers(ctx, findUsersParams).
+		userRepo.EXPECT().FindUsers(gomock.Any(), findUsersParams).
 			Return(createUsersActive(), nil).Times(1)
 
-		userRepo.EXPECT().GetUsersPaginationCount(ctx, getUsersPaginationCountParams).
+		userRepo.EXPECT().GetUsersPaginationCount(gomock.Any(), getUsersPaginationCountParams).
 			Return(int64(12), nil).Times(1)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, IMAGE_NAME, pathSlice[2])
@@ -1638,13 +1638,13 @@ func TestGetUsers(t *testing.T) {
 
 		getUsersPaginationCountParams := createPaginationCountParams(reqParams.SearchValue)
 
-		userRepo.EXPECT().FindUsers(ctx, findUsersParams).
+		userRepo.EXPECT().FindUsers(gomock.Any(), findUsersParams).
 			Return(createUsersActive(), nil).Times(0)
 
-		userRepo.EXPECT().GetUsersPaginationCount(ctx, getUsersPaginationCountParams).
+		userRepo.EXPECT().GetUsersPaginationCount(gomock.Any(), getUsersPaginationCountParams).
 			Return(int64(12), nil).Times(0)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, IMAGE_NAME, pathSlice[2])
@@ -1679,10 +1679,10 @@ func TestGetUserImages(t *testing.T) {
 	t.Run("Failed when finding user images (status code 400)", func(t *testing.T) {
 		userId := USER_ID
 
-		userRepo.EXPECT().FindUserImagesByUserId(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserId(gomock.Any(), userId).
 			Return([]user_db.UserImage{}, errors.New(BAD_REQUEST)).Times(1)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).Times(0)
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|failed when finding user images", BAD_REQUEST),
@@ -1695,10 +1695,10 @@ func TestGetUserImages(t *testing.T) {
 	t.Run("Failed when getting pre signed url (status code 422)", func(t *testing.T) {
 		userid := USER_ID
 
-		userRepo.EXPECT().FindUserImagesByUserId(ctx, userid).
+		userRepo.EXPECT().FindUserImagesByUserId(gomock.Any(), userid).
 			Return(createUserImages(userid), nil).Times(1)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(7)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1712,10 +1712,10 @@ func TestGetUserImages(t *testing.T) {
 	t.Run("Success Request", func(t *testing.T) {
 		userId := USER_ID
 
-		userRepo.EXPECT().FindUserImagesByUserId(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserId(gomock.Any(), userId).
 			Return(createUserImages(userId), nil).Times(1)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, IMAGE_NAME, pathSlice[2])
@@ -1734,10 +1734,10 @@ func TestGetUserImages(t *testing.T) {
 	t.Run("Success request (get data from cache)", func(t *testing.T) {
 		userId := USER_ID
 
-		userRepo.EXPECT().FindUserImagesByUserId(ctx, userId).
+		userRepo.EXPECT().FindUserImagesByUserId(gomock.Any(), userId).
 			Return(createUserImages(userId), nil).Times(0)
 
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				pathSlice := strings.Split(path, "/")
 				assert.Equal(t, IMAGE_NAME, pathSlice[2])
@@ -1769,9 +1769,9 @@ func TestGetUser(t *testing.T) {
 	t.Run("User not found (status code 404)", func(t *testing.T) {
 		userId := USER_ID
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
+		userRepo.EXPECT().FindUserWithImages(gomock.Any(), userId).
 			Return(user_db.FindUserWithImagesRow{}, errors.New(NOT_FOUND)).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).Times(0)
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).Times(0)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
 			Message:    fmt.Sprintf("%s|user not found", NOT_FOUND),
@@ -1785,9 +1785,9 @@ func TestGetUser(t *testing.T) {
 		userId := USER_ID
 
 		userImages, _ := createUserWithImages(userId, true)
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
+		userRepo.EXPECT().FindUserWithImages(gomock.Any(), userId).
 			Return(userImages, nil).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			Return("", errors.New(UNPROCESSABLE_ENTITY)).Times(3)
 
 		assert.PanicsWithValue(t, shrd_utils.AppError{
@@ -1803,9 +1803,9 @@ func TestGetUser(t *testing.T) {
 
 		userImages, _ := createUserWithImages(userId, true)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
+		userRepo.EXPECT().FindUserWithImages(gomock.Any(), userId).
 			Return(userImages, nil).Times(1)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				assert.Contains(t, path, fmt.Sprintf("users/%s", userId))
 				pathSlice := strings.Split(path, "/")
@@ -1824,9 +1824,9 @@ func TestGetUser(t *testing.T) {
 
 		userImages, _ := createUserWithImages(userId, true)
 
-		userRepo.EXPECT().FindUserWithImages(ctx, userId).
+		userRepo.EXPECT().FindUserWithImages(gomock.Any(), userId).
 			Return(userImages, nil).Times(0)
-		fileSvc.EXPECT().GetPreSignUrl(ctx, gomock.Any()).
+		fileSvc.EXPECT().GetPreSignUrl(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ interface{}, path string) (string, error) {
 				assert.Contains(t, path, fmt.Sprintf("users/%s", userId))
 				pathSlice := strings.Split(path, "/")

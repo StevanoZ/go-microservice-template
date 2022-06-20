@@ -14,7 +14,7 @@ import (
 	pubsub_client "github.com/StevanoZ/dv-shared/pubsub"
 	shrd_service "github.com/StevanoZ/dv-shared/service"
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/google/wire"
 	"github.com/sendgrid/sendgrid-go"
 )

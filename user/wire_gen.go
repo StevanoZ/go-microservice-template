@@ -20,7 +20,7 @@ import (
 	"github.com/StevanoZ/dv-user/handler"
 	"github.com/StevanoZ/dv-user/service"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/wire"
 )

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -19,7 +18,7 @@ import (
 	"github.com/StevanoZ/dv-user/dtos/request"
 	"github.com/StevanoZ/dv-user/dtos/response"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -149,7 +148,6 @@ func createUserImagesResp(userId uuid.UUID) []response.UserImageResp {
 }
 
 func TestUserHandlers(t *testing.T) {
-	ctx := context.Background()
 	userHandlersTestCase := []shrd_helper.TestCaseHandler{
 		{
 			Name: "SignUp (status code 201)",
@@ -166,7 +164,7 @@ func TestUserHandlers(t *testing.T) {
 			BuildStub: func(input interface{}, stubs ...interface{}) {
 				userSvc := stubs[0].(*mock_svc.MockUserSvc)
 
-				userSvc.EXPECT().SignUp(ctx, input).
+				userSvc.EXPECT().SignUp(gomock.Any(), input).
 					DoAndReturn(func(_ interface{}, input request.SignUpReq) response.UserResp {
 						userResp := createUserResp()
 						userResp.Email = input.Email
@@ -202,7 +200,7 @@ func TestUserHandlers(t *testing.T) {
 			BuildStub: func(input interface{}, stubs ...interface{}) {
 				userSvc := stubs[0].(*mock_svc.MockUserSvc)
 
-				userSvc.EXPECT().LogIn(ctx, input).
+				userSvc.EXPECT().LogIn(gomock.Any(), input).
 					DoAndReturn(func(_ interface{}, input request.LogInReq) response.UserWithTokenResp {
 						userWithTokenResp := createUserWithTokenResp()
 						userWithTokenResp.Email = input.Email
@@ -236,7 +234,7 @@ func TestUserHandlers(t *testing.T) {
 			BuildStub: func(input interface{}, stubs ...interface{}) {
 				userSvc := stubs[0].(*mock_svc.MockUserSvc)
 
-				userSvc.EXPECT().VerifyOtp(ctx, input).
+				userSvc.EXPECT().VerifyOtp(gomock.Any(), input).
 					DoAndReturn(func(_ interface{}, input request.VerifyOtpReq) response.UserWithTokenResp {
 						userWithTokenResp := createUserWithTokenResp()
 						userWithTokenResp.Email = input.Email
@@ -268,7 +266,7 @@ func TestUserHandlers(t *testing.T) {
 			BuildStub: func(input interface{}, stubs ...interface{}) {
 				userSvc := stubs[0].(*mock_svc.MockUserSvc)
 
-				userSvc.EXPECT().ResendOtp(ctx, input).
+				userSvc.EXPECT().ResendOtp(gomock.Any(), input).
 					Return().Times(1)
 			},
 			CheckResponse: func(recorder *httptest.ResponseRecorder, expected interface{}) {
@@ -322,7 +320,7 @@ func TestUserHandlers(t *testing.T) {
 			BuildStub: func(input interface{}, stubs ...interface{}) {
 				userSvc := stubs[0].(*mock_svc.MockUserSvc)
 
-				userSvc.EXPECT().GetUsers(ctx, createDefaultPaginationReq()).
+				userSvc.EXPECT().GetUsers(gomock.Any(), createDefaultPaginationReq()).
 					Return(createUserWithPaginationResp()).Times(1)
 			},
 			CheckResponse: func(recorder *httptest.ResponseRecorder, expected interface{}) {

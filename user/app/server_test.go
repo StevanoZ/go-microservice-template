@@ -11,7 +11,7 @@ import (
 	shrd_utils "github.com/StevanoZ/dv-shared/utils"
 	"github.com/StevanoZ/dv-user/handler"
 	mock_svc "github.com/StevanoZ/dv-user/service/mock"
-	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
