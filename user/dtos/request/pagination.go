@@ -7,4 +7,5 @@ type PaginationReq struct {
 	SearchValue string `json:"searchValue"`
 	FilterBy    string `json:"filterBy"`
 	SortBy      string `json:"sortBy"`
+	IsCache     string `json:"IsCache"`
 }

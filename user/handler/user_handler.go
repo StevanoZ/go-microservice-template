@@ -146,6 +146,7 @@ func (h *UserHandlerImpl) GetUsers(w http.ResponseWriter, r *http.Request) {
 	searchValueQuery := r.URL.Query().Get("searchValue")
 	filterByQuery := r.URL.Query().Get("filterBy")
 	sortByQuery := r.URL.Query().Get("sortBy")
+	isCacheQuery := r.URL.Query().Get("isCache")
 
 	input := request.PaginationReq{
 		Page:        (page - 1) * limit,
@@ -154,6 +155,7 @@ func (h *UserHandlerImpl) GetUsers(w http.ResponseWriter, r *http.Request) {
 		SearchValue: searchValueQuery,
 		FilterBy:    filterByQuery,
 		SortBy:      sortByQuery,
+		IsCache:     isCacheQuery,
 	}
 
 	resp := h.userSvc.GetUsers(r.Context(), input)

@@ -967,6 +967,11 @@ func (s *UserSvcImpl) DeleteImage(ctx context.Context, userId uuid.UUID, imageId
 func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq) response.UsersWithPaginationResp {
 	svcCtx, svcTrc := shrd_utils.CreateTracer(ctx, "service.GetUsers")
 	defer shrd_utils.CheckTracerSvc(svcTrc)
+	cacheDuration := time.Duration(1 * time.Microsecond)
+
+	if input.IsCache == "true" {
+		cacheDuration = time.Duration(1 * time.Hour)
+	}
 
 	ewg1 := errgroup.Group{}
 	ewg2 := errgroup.Group{}
@@ -1037,7 +1042,7 @@ func (s *UserSvcImpl) GetUsers(ctx context.Context, input request.PaginationReq)
 		usersPaginationResp.Pagination = mapping.ToPaginationResp(input.Page, input.Limit, int(counts))
 
 		return usersPaginationResp
-	})
+	}, cacheDuration)
 
 	shrd_utils.PanicIfError(err)
 	shrd_utils.ConvertInterfaceP(data, &usersPaginationResp)
