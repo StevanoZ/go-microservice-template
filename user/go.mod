@@ -113,7 +113,7 @@ require (
 require (
 	cloud.google.com/go/pubsub v1.21.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/StevanoZ/dv-shared v1.5.15
+	github.com/StevanoZ/dv-shared v1.5.16
 	github.com/alicebob/miniredis/v2 v2.21.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.7
 	github.com/go-chi/chi v1.5.4
